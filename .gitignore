@@ -22,3 +22,22 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+
+# Skills & agents
+.agents/
+skills-lock.json
+
+# Setup scripts
+setup_wsl.sh
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
