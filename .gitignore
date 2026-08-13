@@ -39,6 +39,27 @@ __pycache__/
 .venv/
 venv/
 
+
 # IDE
 .vscode/
 .idea/
+
+# Testing & quality
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+coverage.xml
+*.cover
+.coverage
+.coverage.*
+
+# Build
+dist/
+*.egg-info/
+
+# Bandit
+bandit-report.json
+
+# Graphify
+graphify-out/

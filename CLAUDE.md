@@ -1,0 +1,292 @@
+# Forecasting Agent — Project Instructions
+
+## Project
+Private AI-powered forecasting agent. Python 3.12. Repo must stay private.
+
+## Terminal
+Always use Bash (WSL) for all terminal commands. Never use PowerShell.
+
+## Obsidian Sync (HARD RULE)
+Every session MUST update the Obsidian vault at `C:\Users\vama0\Knowledge` before finishing:
+1. `Daily/<YYYY-MM-DD>.md` — log what was done
+2. `Projects/Forecasting Agent/Kanban.md` — move tasks between columns
+3. `Projects/Forecasting Agent.md` — update checklist
+4. Relevant sub-notes (Architecture, Tech Stack, Research, Models Catalog) if decisions were made
+
+## Skill Usage (HARD RULE)
+ALL installed skills and tools MUST be actively used when relevant. Don't limit to a subset — use the full arsenal wisely. Key enforcement:
+- `/ponytail` — run on EVERY implementation to force simplest solution
+- `/grill-me` — stress-test EVERY design decision before committing
+- `/using-superpowers` — leverage advanced tool capabilities for complex tasks
+- `/verification-before-completion` — verify EVERY piece of work before marking done
+- `/clean-code-principles` + `/solid-principles` — consult on EVERY class/module design
+- `/ponytail-review` — run on EVERY PR/diff before merging
+
+## Design Principles (HARD RULE)
+Every design decision MUST be reasoned out. No implicit choices.
+
+### Required for all code:
+- **OOP** — object-oriented design throughout (classes, encapsulation, polymorphism)
+- **SOLID** — Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion
+- **Clean Architecture** — dependency rule, layers pointing inward, business logic independent of frameworks
+- **Composition over Inheritance** — prefer composing behaviors over deep class hierarchies
+
+### Required for all design decisions:
+Before implementing any module, class, or architectural choice, document:
+- **Pros** — why this approach
+- **Cons** — trade-offs and risks
+- **Where it fits best** — ideal use cases for this pattern
+- **Where it doesn't suit** — when to avoid it
+
+---
+
+## Full Toolkit Reference
+
+### Installed Project Skills (use via /skill-name)
+
+#### Development Workflow (obra/superpowers)
+- `/writing-plans` — architecture and implementation plans
+- `/executing-plans` — step-by-step plan execution
+- `/subagent-driven-development` — parallel implementation across files via subagents
+- `/dispatching-parallel-agents` — fan out independent tasks to multiple agents
+- `/test-driven-development` — TDD workflow (write test → fail → implement → pass)
+- `/using-git-worktrees` — parallel branch work without stashing
+- `/finishing-a-development-branch` — PR preparation, cleanup, merge readiness
+- `/brainstorming` — ideation with visual companion and spec document review
+- `/using-superpowers` — advanced multi-tool orchestration patterns
+- `/writing-skills` — create new custom skills for the project
+
+#### Code Quality & Review (obra/superpowers)
+- `/requesting-code-review` — get structured PR review
+- `/receiving-code-review` — handle and apply review feedback
+- `/systematic-debugging` — root cause tracing, condition-based waiting, defense in depth
+- `/verification-before-completion` — verify all work before marking done
+
+#### Code Quality (ponytail suite)
+- `/ponytail` — force laziest/simplest solution that works (YAGNI enforcement)
+- `/ponytail-review` — find over-engineering in diffs (what to delete/simplify)
+- `/ponytail-audit` — whole-repo scan for bloat, reinvented stdlib, dead flexibility
+- `/ponytail-debt` — harvest all `ponytail:` comments into a debt ledger
+
+#### Design & Architecture
+- `/clean-code-principles` — SOLID, DRY, KISS, design patterns, clean code fundamentals
+- `/solid-principles` — SOLID implementation guidance for modules/functions/components
+- `/clean-architecture` — dependency rule, ports/adapters, hexagonal, onion architecture
+- `/composition-over-inheritance` — when to compose vs inherit, refactoring hierarchies
+
+#### API & Backend
+- `/fastapi` — official FastAPI best practices, Pydantic, SSE, dependencies
+- `/fastapi-templates` — production-ready FastAPI project scaffolding
+- `/fastapi-python` — FastAPI async patterns, error handling, middleware
+
+#### Data Science & ML
+- `/data-science-python-stack` — opinionated Python ML/DS library choices (probabl-ai)
+- `/time-series-analysis` — time series methods, decomposition, forecasting approaches
+- `/llm-evaluation` — LLM quality metrics, automated evaluation, benchmarking
+- `/llm-app-patterns` — production LLM application patterns (Dify-inspired)
+
+#### Infrastructure
+- `/github-actions` — CI/CD workflow management
+- `/docker-build-deploy` — containerization, multi-stage builds, GitHub Actions deploy
+
+#### Other Project Skills
+- `/grill-me` — stress-test ideas, code, or implementations
+- `/lean-ctx` — context-efficient coding patterns
+- `/graphify` — build knowledge graph from codebase, query it, trace paths
+
+### Platform Skills (always available, no install needed)
+
+#### Engineering
+- `/engineering:architecture` — system architecture design
+- `/engineering:system-design` — distributed system design
+- `/engineering:code-review` — structured code review
+- `/engineering:debug` — structured debugging methodology
+- `/engineering:testing-strategy` — test planning and strategy
+- `/engineering:tech-debt` — technical debt management
+- `/engineering:deploy-checklist` — release preparation checklist
+- `/engineering:incident-response` — incident management workflow
+- `/engineering:documentation` — documentation generation
+- `/engineering:standup` — standup report generation
+
+#### Design & UX
+- `/design:accessibility-review` — accessibility audit
+- `/design:design-critique` — design critique and feedback
+- `/design:design-system` — design system creation/management
+- `/design:research-synthesis` — synthesize user research findings
+- `/design:user-research` — user research methodology
+- `/design:ux-copy` — UX writing and copy
+
+#### Figma Integration
+- `/figma:figma-design-to-code` — implement Figma designs as code
+- `/figma:figma-generate-design` — translate app pages into Figma
+- `/figma:figma-generate-library` — build design system in Figma from code
+- `/figma:figma-code-connect` — map Figma components to codebase components
+- `/figma:figma-generate-diagram` — create diagrams in Figma
+- `/figma:figma-use` — general Figma interaction
+- `/figma:figma-use-figjam` — FigJam content creation
+- `/figma:figma-use-slides` — Figma Slides
+- `/figma:figma-implement-motion` — motion/animation implementation
+- `/figma:figma-create-new-file` — create new Figma files
+
+#### Web Research & Scraping (firecrawl suite)
+- `/firecrawl` — general web scraping
+- `/firecrawl-deep-research` — thorough multi-source research
+- `/firecrawl-search` — web search with structured results
+- `/firecrawl-scrape` — scrape specific pages
+- `/firecrawl-crawl` — crawl entire sites
+- `/firecrawl-map` — site mapping
+- `/firecrawl-competitive-intel` — competitive intelligence gathering
+- `/firecrawl-market-research` — market research automation
+- `/firecrawl-lead-gen` — lead generation
+- `/firecrawl-lead-research` — lead research and enrichment
+- `/firecrawl-knowledge-base` — build knowledge bases from web
+- `/firecrawl-knowledge-ingest` — ingest web content into knowledge
+- `/firecrawl-research-papers` — research paper discovery
+- `/firecrawl-developer-index` — developer documentation indexing
+- `/firecrawl-seo-audit` — SEO audit
+- `/firecrawl-monitor` — website monitoring
+- `/firecrawl-qa` — QA testing via web
+- `/firecrawl-dashboard-reporting` — dashboard data gathering
+- `/firecrawl-website-design-clone` — clone website designs
+- `/firecrawl-build` — build projects from web references
+
+#### Document Generation (anthropic-skills)
+- `/anthropic-skills:pdf` — generate PDF documents
+- `/anthropic-skills:pptx` — generate PowerPoint presentations
+- `/anthropic-skills:xlsx` — generate Excel spreadsheets
+- `/anthropic-skills:docx` — generate Word documents
+- `/anthropic-skills:schedule` — scheduling assistance
+- `/anthropic-skills:morning` — morning briefing
+
+#### Frontend & UI
+- `/frontend-design` — frontend design patterns
+- `/react-best-practices` — React patterns (if we add frontend)
+- `/web-design-guidelines` — web design guidelines
+- `/ui-ux-pro-max` — advanced UI/UX design
+- `/design-taste-frontend` — design taste for frontend
+- `/accessibility-audit` / `/accessibility-fix` / `/accessibility-scan` — a11y tools
+
+#### Visualization
+- `/dataviz` — chart design system (colors, forms, marks, interactions)
+
+#### Code Intelligence
+- `/claude-api` — Claude/Anthropic API reference (models, pricing, tool use, agents)
+- `/simplify` — review changed code for reuse, simplification, efficiency
+- `/security-review` — security audit of code
+
+#### Productivity & Automation
+- `/loop` — run commands on recurring intervals
+- `/update-config` — configure hooks and settings
+- `/keybindings-help` — customize keyboard shortcuts
+- `/fewer-permission-prompts` — optimize permission settings
+- `/init` — project initialization
+- `/run` — launch and drive the app
+
+#### Resume & Career (if needed)
+- `/resume-ats-optimizer` — ATS optimization
+- `/tailored-resume-generator` — tailored resume generation
+- `/resume-bullet-writer` — resume bullet points
+
+### MCP Servers (connected)
+
+#### graphify — Code Intelligence Graph (★ PRIMARY MCP)
+
+**MUST USE graphify MCP for all code intelligence.** Prefer graphify tools over reading files when finding symbols, tracing calls, assessing blast radius, or mapping dependencies.
+
+**Graph Query Tools** (active once repo is indexed):
+- `query_graph` — semantic code search with materialized definition bodies (start here for any code question)
+- `graphify_find` — find symbols by name substring
+- `graphify_node` — get symbol body + direct graph neighbors
+- `graphify_callers` — who calls this symbol (directed)
+- `graphify_callees` — what this symbol calls (directed)
+- `graphify_trace` — directed call paths between two symbols
+- `graphify_impact` — change-impact fanout from a symbol
+- `impact_and_risk` — impact + linked-test coverage = ranked hotspot files
+- `graphify_rank_files` — rank source files for a natural-language question
+- `graphify_file_neighbors` — per-file blast-radius map
+- `graphify_imports_exports` — import/export dependency edges for a file
+- `graphify_tests_for` — find tests linked to a symbol or file
+- `graphify_references` — non-call references touching a symbol
+- `graphify_expand` — materialize node handles into full definition bodies
+- `graphify_find_seeds` — scored seed nodes for a question (without expansion)
+- `shortest_path` — confidence-weighted path between two symbols
+- `graph_stats` — summary stats (nodes, edges, communities)
+- `list_repositories` — list all indexed repos
+
+**Durable Memory Tools** (always available):
+- `remember` — store a durable fact/decision/constraint for later recall
+- `recall` — retrieve stored memories ranked by relevance
+- `ingest_turns` — store full conversations for cross-turn reasoning
+
+**When to use which:**
+- "Where is X defined?" → `graphify_find` or `query_graph`
+- "What calls X?" → `graphify_callers`
+- "What does X call?" → `graphify_callees`
+- "How does A connect to B?" → `graphify_trace` or `shortest_path`
+- "If I change X, what breaks?" → `graphify_impact` or `impact_and_risk`
+- "Which files matter for this question?" → `graphify_rank_files`
+- "What tests cover this?" → `graphify_tests_for`
+- "What imports/exports does this file have?" → `graphify_imports_exports`
+- "Remember this decision for next session" → `remember`
+- "What did we decide about X?" → `recall`
+
+#### langchain-docs — LangChain Documentation
+- `search_docs_by_lang_chain` — search LangChain docs
+- `query_docs_filesystem_docs_by_lang_chain` — query docs filesystem
+
+#### figma — Design ↔ Code Bridge
+- Full design reading, writing, code connect, diagram generation, asset management
+
+#### visualize — Inline Visualization
+- `show_widget` — render SVG/HTML inline (charts, diagrams, dashboards, interactive widgets)
+- `read_me` — load design system guidance for visualizations
+
+#### openart — AI Image/Video Generation
+- Image generation, video generation, model listing, project management
+
+#### claude-in-chrome — Real Browser Automation
+- Navigate, read pages, fill forms, execute JS, capture screenshots in real Chrome
+
+#### Browser (built-in) — In-App Browser
+- Navigate, read pages, forms, console, network, screenshots, tabs
+
+#### mcp-registry — Discover New Tools
+- Search for and discover new MCP servers
+
+#### scheduled-tasks — Cron/Recurring
+- Create, update, delete, list scheduled tasks
+
+### Agent Types (spawnable)
+- `Explore` — fast read-only code search (quick/medium/thorough)
+- `Plan` — architecture and implementation planning
+- `claude` — general-purpose catch-all
+- `general-purpose` — multi-step research and complex tasks
+- `claude-code-guide` — Claude Code usage questions
+
+### Workflow Tool
+- Multi-agent orchestration with `pipeline()`, `parallel()`, `phase()`, `agent()`
+- Patterns: adversarial verify, judge panel, loop-until-dry, multi-modal sweep
+
+---
+
+## GitHub
+- Repo: `vama0259/Forecasting_Agent` (private)
+- CLI: `gh` authenticated as `vama0259`
+- Remote: `origin` → `https://github.com/vama0259/Forecasting_Agent.git`
+
+## Toolchain
+- **Python 3.12** pinned via `.python-version`
+- **uv** for dependency management — `uv sync`, `uv run pytest`, etc. No pip/requirements.txt
+- **Ruff** for linting + formatting (120 char lines, config in pyproject.toml)
+- **Bandit** for security scanning
+- **mypy** for strict type checking
+- **pre-commit** for git hooks (ruff, bandit, trailing whitespace, secrets detection)
+- **Makefile** — `make setup`, `make check`, `make test`, `make format`
+- **graphify MCP** — code graph indexed, queryable for impact analysis
+
+## Code Style
+- Python 3.12, Ruff for linting/formatting, 120 char line length
+- No comments unless the WHY is non-obvious
+- Security: Bandit clean, no secrets in code
+- Use `/ponytail` mindset: simplest solution that works (YAGNI within SOLID)
+- All commands via `uv run` (not bare `python`/`pip`)
