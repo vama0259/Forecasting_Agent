@@ -18,13 +18,13 @@
 
 ---
 
-## 🏛️ Slide 2: The 3 Core Architectural Pillars
+## 🏛️ Slide 2: The 3 Core Architectural Pillars & Open-Source Stack
 
 ```mermaid
 flowchart LR
-    P1["1. TypeScript Harness<br/>(LangGraph.js Orchestrator & Supervisor)"]
-    P2["2. Two-Tier Docker Sandbox<br/>(Isolated Python CodeAct Execution)"]
-    P3["3. Read-Only Math Judge (M8)<br/>(Immutable Anti-Leakage Evaluator)"]
+    P1["1. TypeScript Harness<br/>(@langchain/langgraph • Zod • Nunjucks)"]
+    P2["2. Two-Tier Docker Sandbox<br/>(async-mutex Semaphore • 45s Timeout)"]
+    P3["3. Read-Only Math Judge (M8)<br/>(Scikit-Learn • Hampel • Scipy)"]
 
     P1 <--> P2
     P2 <--> P3
@@ -32,17 +32,17 @@ flowchart LR
 
 ### 🗣️ What to Say:
 > *"Our architecture separates three distinct concerns:*
-> 1. **The Brain (TypeScript):** Orchestrates multi-agent planning and tools using LangGraph.js.
-> 2. **The Workbench (Docker):** Safely executes agent-generated Python modeling scripts in isolated containers.
+> 1. **The Brain (TypeScript):** Orchestrates multi-agent planning and tools using `@langchain/langgraph` and `zod`.
+> 2. **The Workbench (Docker):** Safely executes agent-generated Python modeling scripts in isolated containers under `async-mutex` Semaphore concurrency.
 > 3. **The Judge (Read-Only Python):** Evaluates models against strict time-series metrics. The agent can never edit or cheat its own grader.*"
 
 ---
 
-## 📊 Slide 3: The Data Layer (M1) & Resilience
+## 📊 Slide 3: The Data Layer (M1) & Hampel Filter
 
 ```mermaid
 flowchart LR
-    INPUT["NSE / BSE / F&O Feeds"] --> HAMPEL["Hampel Outlier Sanitizer<br/>(Rolling 20-bar Winsorization)"]
+    INPUT["NSE / BSE / F&O Feeds"] --> HAMPEL["Hampel Outlier Sanitizer<br/>(Rolling 20-bar Median Absolute Dev)"]
     HAMPEL --> ALIGN["Cross-Asset Alignment<br/>(Causal ffill across timezones)"]
     ALIGN --> FALLBACK{"Feed Failed?"}
     FALLBACK -- No --> CLEAN["Sanitized OHLCV Schema"]
@@ -50,8 +50,8 @@ flowchart LR
 ```
 
 ### 🗣️ What to Say:
-> *"Market data is messy and prone to scrapers breaking. M1 solves this in two ways:*
-> - **Deterministic Cleaning:** It runs rolling Hampel filters to clip rogue fat-tail outliers and aligns holidays across US, Indian, and crypto markets.
+> *"Market data is messy and scrapers break often. M1 solves this in two ways:*
+> - **Deterministic Cleaning:** It runs rolling Hampel filters using `scipy.stats.median_abs_deviation` to clip fat-tail outlier wicks and aligns holidays across US, Indian, and crypto markets.
 > - **Graceful Degradation:** If live exchange scrapers fail, M1 serves yesterday's cached data, marks `data_stale=true`, and automatically penalizes the agent's confidence by 30% rather than crashing.*"
 
 ---
@@ -94,11 +94,11 @@ flowchart TB
 > - **R1:** Agents analyze data independently in Docker.
 > - **R2:** Agents cross-examine each other's evidence.
 > - **R3 (Devil's Advocate):** The supervisor finds the weakest argument and forces the lowest-calibration agent to aggressively attack it.
-> - **R4 (Arithmetic Consensus):** The final probability is **computed in code** using historical accuracy weights. The LLM only writes the narrative; it never touches the final numbers.*"
+> - **R4 (Arithmetic Consensus):** The final probability is **computed in code** using historical accuracy weights clamped between 15% and 40%. The LLM only writes the narrative; it never touches the final numbers.*"
 
 ---
 
-## 🛡️ Slide 6: Two-Tier Sandboxing & Execution (M5)
+## 🛡️ Slide 6: Two-Tier Sandboxing & Semaphore Concurrency (M5)
 
 ```
   TIER 1: EXPLORE (Fast & Stateful)              TIER 2: VALIDATE (Cold & Clean)
@@ -113,7 +113,7 @@ flowchart TB
 ### 🗣️ What to Say:
 > *"Running AI-generated code has two conflicting needs: exploration needs to be fast and allow experimenting with libraries, but validation must be 100% clean and reproducible.*
 >
-> *Under our two-tier design, the agent iterates freely in a warm scratchpad. When it submits a model, we re-run it from scratch on a clean container with zero internet. If it fails there, it depended on leftover residue and gets rejected immediately.*"
+> *Under our two-tier design, the agent iterates freely in a warm scratchpad with an `async-mutex` Semaphore(2) protecting CPU and memory. When it submits a model, we re-run it from scratch on a clean container with zero internet. If it fails there, it depended on leftover residue and gets rejected immediately.*"
 
 ---
 
@@ -135,7 +135,23 @@ flowchart LR
 
 ---
 
-## 💰 Slide 8: The $0.17 Unit Economics Secret (M2 / M9)
+## ⚡ Slide 8: Prompt Compilation (DSPy MIPROv2) & Shared Jinja2 Templates
+
+```mermaid
+flowchart LR
+    DSPY["Python Offline Compiler<br/>(DSPy MIPROv2 + Optuna)"] -->|Compiles across Regimes| JINJA["Shared Jinja2 / .j2 Templates<br/>(prompts/fii_analyst.j2)"]
+    JINJA -->|Hydrated in <1ms via Nunjucks| HARNESS["TypeScript Online Runtime<br/>(LangGraph.js Harness)"]
+    HARNESS -->|Streams Traces| LF["Langfuse Telemetry Sink"]
+```
+
+### 🗣️ What to Say:
+> *"Instead of writing brittle prompt strings by hand, we use **DSPy MIPROv2** to optimize instructions and few-shot examples algorithmically against historical market regimes.*
+>
+> *We store prompts as shared `.j2` templates: compiled in Python with `dspy` for under $0.50, and loaded dynamically at runtime in TypeScript using `nunjucks` in under 1 millisecond with zero Python runtime dependency.*"
+
+---
+
+## 💰 Slide 9: The $0.17 Unit Economics Secret (M2 / M9)
 
 ```mermaid
 flowchart LR
@@ -157,7 +173,7 @@ flowchart LR
 
 ---
 
-## 🔍 Slide 9: Observability, Tracing & Fail-Fast Boot (ADR-026/027)
+## 🔍 Slide 10: Observability, Tracing & Fail-Fast Boot (ADR-026/027)
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -171,12 +187,12 @@ flowchart LR
 
 ### 🗣️ What to Say:
 > *"We built institutional-grade observability into the system:*
-> - **Unified Trace Hierarchy:** Every LLM token, Docker traceback, and MCP call is tied to a single root `forecast_run_id` across TypeScript and Python.
+> - **Unified Trace Hierarchy:** Every LLM token, Docker traceback, and MCP call is tied to a single root `forecast_run_id` across TypeScript and Python using **Langfuse**.
 > - **200ms Fail-Fast Boot Check:** When the CLI starts, it verifies Docker, Redis, Postgres, and MCP connections in 200 milliseconds. If an API key is missing or Docker is offline, it tells you immediately before wasting a token.*"
 
 ---
 
-## 🎯 Slide 10: The Executive Summary (The Bottom Line)
+## 🎯 Slide 11: The Executive Summary (The Bottom Line)
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -192,6 +208,7 @@ flowchart LR
 ### 🗣️ Your Closing Words:
 > *"In summary, this is not a wrapper. It is an end-to-end, sandboxed, mathematically verifiable intelligence engine:*
 > - *It writes real code instead of chatting.*
+> - *It compiles its prompts with DSPy instead of guessing.*
 > - *It argues from real exchange flow data instead of noise.*
 > - *It cannot cheat its own evaluation.*
 > - *And it runs for less than 20 cents a forecast with 85% gross margins.*

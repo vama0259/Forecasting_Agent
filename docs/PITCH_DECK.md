@@ -16,7 +16,7 @@
 > **"Financial and industry forecasting is broken: humans waste 3 hours a day compiling data, while generic AI hallucinates unverified numbers. We built an autonomous coding agent that writes, sandboxes, and verifies quantitative models on demand."**
 
 - **The Vision:** A self-extending platform where financial forecasting is Skill Pack #1, expanding into a universal autonomous industry intelligence engine.
-- **Core Edge:** Models Indian market participant intent (FII, DII, Retail) using proprietary exchange disclosures, audited by a read-only mathematical evaluation engine.
+- **Core Edge:** Models Indian market participant intent (FII, DII, Retail) using proprietary exchange disclosures, compiled via **DSPy MIPROv2**, and audited by a read-only mathematical evaluation engine.
 - **Unit Economics:** Sub-$0.20 cost per forecast ($0.17/run) delivering institutional-grade research with **85% software gross margins**.
 
 ---
@@ -53,9 +53,9 @@ flowchart LR
 └──────────────────────────────┘            └──────────────────────────────────────────────┘
 ```
 
-1. **Autonomous CodeAct Execution:** The agent doesn't just talk—it writes feature engineering and statistical modeling code in isolated Docker sandboxes.
-2. **Deterministic Arithmetic Consensus:** LLMs argue in a 4-round debate, but final probability aggregation is pure arithmetic weighted by historical calibration (eliminating sycophancy).
-3. **1-Page Actionable Executive Digest:** Delivers clear directional bias, participant positioning breakdown, bull/bear pathways, and thesis invalidation levels.
+1. **Autonomous CodeAct Execution:** The agent doesn't just talk—it writes feature engineering and statistical modeling code in isolated Docker sandboxes with Semaphore(2) concurrency control.
+2. **Deterministic Arithmetic Consensus:** LLMs argue in a 4-round debate, but final probability aggregation is pure arithmetic weighted by historical calibration (clamped between 15% and 40%).
+3. **1-Page Actionable Executive Digest:** Delivers clear directional bias, participant positioning breakdown, bull/bear pathways, and 15-minute closing bar invalidation levels.
 
 ---
 
@@ -81,7 +81,7 @@ Most competitors use commodity price scrapers. Our architecture derives its edge
 ```
                        ASPAC PARTICIPANT-INTENT MODELING
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│ PRICE AGENT (Anchor) ──► OHLCV + Technical Momentum + Trend Baselines                  │
+│ PRICE AGENT (Anchor) ──► OHLCV + Technical Momentum + Hampel Outlier Cleaning          │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ FII INTENT AGENT     ──► Foreign Institutional Flows, Index F&O OI, USDINR, Global Cues│
 ├────────────────────────────────────────────────────────────────────────────────────────┤
@@ -95,25 +95,26 @@ Most competitors use commodity price scrapers. Our architecture derives its edge
 
 ---
 
-## Slide 6: System Architecture & Tech Stack
+## Slide 6: System Architecture & Open-Source Tech Stack
 
 ```mermaid
 flowchart TB
   subgraph Harness["TypeScript Orchestration Harness"]
-    M7["Supervisor Orchestrator<br/>(LangGraph.js • 4-Round Debate)"]
+    M7["Supervisor Orchestrator<br/>(@langchain/langgraph • 4-Round Debate)"]
     M6["Participant Sub-Agents<br/>(Price, FII, DII, Retail)"]
-    CAP["Capability Layer<br/>(Config Registry • Zod)"]
+    CAP["Capability Layer<br/>(Zod Validation • Nunjucks Prompt Hydration)"]
   end
 
   subgraph Execution["Two-Tier Execution Sandbox"]
-    EXP["Warm Explore Sandbox<br/>(PyPI Allowed • Semaphore(2))"]
+    EXP["Warm Explore Sandbox<br/>(async-mutex Semaphore(2) • 45s Timeout)"]
     VAL["Cold Validate Sandbox<br/>(Clean Image • --network none)"]
     M8["M8 Read-Only Evaluator<br/>(MASE • Brier • Purged CV Gate)"]
   end
 
   subgraph Services["MCP Data & Storage Services"]
-    M1["Market Data MCP (yfinance + Indian Feeds)"]
-    M2["DeepSeek LLM Gateway ($0.17 Prefix Cache)"]
+    M1["Market Data MCP (yfinance + Hampel Scipy)"]
+    M2["DeepSeek Gateway ($0.17 Prefix Cache)"]
+    DSPY["Offline DSPy MIPROv2 Optimizer"]
     DB[("Postgres (as_of Guard) + Redis + Langfuse")]
   end
 
@@ -121,6 +122,7 @@ flowchart TB
   CAP --> M1 & M2
   M6 --> EXP --> VAL --> M8
   M7 --> DB
+  DSPY -.->|Compiles JSON Prompts| CAP
 ```
 
 ---
@@ -135,7 +137,8 @@ Round 4: Deterministic Math    ──► Historical calibration weighting comput
 ```
 
 - **Hard Devil's Advocate Assignment ([ADR-024](docs/ARCHITECTURE.md#adr-024)):** Backed by AI literature—soft prompts ("think critically") cause nuanced agreement; hard assignment breaks echo chambers.
-- **Dual-Scenario Deadlock:** On genuine 50/50 uncertainty, the system emits both Bull and Bear pathways with clear invalidation trigger prices rather than forcing a low-conviction call.
+- **Regime Shift Clamping ([ADR-022](docs/ARCHITECTURE.md#adr-022)):** Brier calibration weights are clamped to $[15\%, 40\%]$ over a 30-day rolling window to prevent overfitting during sudden market regime flips.
+- **Dual-Scenario Deadlock:** On genuine 50/50 uncertainty, the system emits both Bull and Bear pathways with clear invalidation trigger prices (15-minute close confirmation).
 
 ---
 
@@ -165,7 +168,7 @@ flowchart TD
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ COGS BREAKDOWN (Cost of Goods Sold):                                                   │
 │ • 40 Forecast Runs × $0.17 (DeepSeek v4-flash off-peak prefix cache)   = $6.80         │
-│ • News Search API Quota Allocation                                     = $1.00         │
+│ • DuckDuckGo / AnySearch API Quota Allocation                          = $1.00         │
 │ • Cloud Sandbox Compute & Database Hosting                             = $1.20         │
 │ TOTAL INFRASTRUCTURE COST PER USER                                     = $9.00 / month │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
@@ -173,7 +176,7 @@ flowchart TD
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-> **Why our costs are low:** DeepSeek's volatile-last prefix caching cuts token spend by **$31\text{--}50\times$**, while post-15:30 IST batching leverages 50% off-peak API pricing.
+> **Why our costs are low:** DeepSeek's volatile-last prefix caching cuts token spend by **$31\text{--}50\times$**, offline DSPy compilation runs for **$0.48**, and post-15:30 IST batching leverages off-peak pricing.
 
 ---
 
@@ -182,7 +185,8 @@ flowchart TD
 | Feature | Bloomberg Terminal | Generic AI Wrappers | FinRobot (Academic) | **Forecasting Agent** |
 |---|---|---|---|---|
 | **Monthly Cost** | $2,500 / mo | $20 / mo | Open Source (Local) | **$60 / mo (₹4,999)** |
-| **Code-Writing Sandboxes** | ❌ Static data | ❌ Text only | ⚠️ Unsandboxed | **✅ Two-Tier Docker** |
+| **Code-Writing Sandboxes** | ❌ Static data | ❌ Text only | ⚠️ Unsandboxed | **✅ Two-Tier Docker + Semaphore** |
+| **Prompt Compilation** | ❌ None | ❌ Manual strings | ❌ Hardcoded | **✅ DSPy MIPROv2 + Nunjucks** |
 | **Indian Market Moat (F&O)**| ⚠️ Raw tables only | ❌ None | ❌ US Equities only | **✅ Deep Participant Intent** |
 | **Mathematical Anti-Leakage**| ❌ Manual | ❌ High hallucination | ⚠️ Basic DCF | **✅ Read-Only 4-Layer Gate** |
 | **Autonomous Self-Improvement**| ❌ None | ❌ None | ❌ None | **✅ Skill Vault (ADR-027)** |
@@ -214,7 +218,7 @@ gantt
 
 ## Slide 12: The Ask & Milestones
 
-- **Current Milestone:** Finalized 27 Architecture Decision Records, fully verified toolchain (uv, Python 3.12, Node 24), and complete system blueprints.
+- **Current Milestone:** Finalized 27 Architecture Decision Records, fully verified toolchain (`uv`, Python 3.12, Node 24, `@langchain/langgraph`, `dspy`, `langfuse`), and complete system blueprints.
 - **Immediate Target:** Launch closed beta with 10 active swing traders and achieve **Milestone 6 (Verified Price Anchor MASE)**.
 - **The Vision:** Transforming from an Indian market forecasting agent into **the universal autonomous intelligence analyst for any global industry**.
 
