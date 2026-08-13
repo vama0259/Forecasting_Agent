@@ -13,6 +13,16 @@ Every session MUST update the Obsidian vault at `C:\Users\vama0\Knowledge` befor
 3. `Projects/Forecasting Agent.md` — update checklist
 4. Relevant sub-notes (Architecture, Tech Stack, Research, Models Catalog) if decisions were made
 
+### Obsidian Plugin Usage Rules (HARD RULE — apply automatically, don't wait to be asked)
+Full plugin reference: see `docs/obsidian-bridge.md`. WHEN → DO triggers Claude Code must apply every session:
+- **Dataview** — WHEN writing/editing an architecture, tech-stack, or ADR-style decision: give the note `type: adr`, `date: <YYYY-MM-DD>`, `status: <decided|proposed|superseded>`, `parent: "[[Forecasting Agent]]"` so it surfaces in the hub's "Key Decisions" table without being asked. WHEN creating any new project sub-note: give it `parent: "[[Forecasting Agent]]"` so "Recent Activity" picks it up. Never write a decision note with frontmatter the hub queries can't see — verify against the actual query in `Forecasting Agent.md` before assuming a field name is right (caught one broken query 2026-08-14).
+- **Kanban** — WHEN a task starts this session: move it Backlog → In Progress. WHEN it finishes: move it → Done as `- [x]`. Do this as part of every session's mandatory sync (rule above), not only when the user asks for status.
+- **Templater** — WHEN creating a new Daily note: use `Daily Note.md`'s shape (`## Focus` / `## Notes` / `## Links` / `## End of Day`) — don't freehand it. WHEN logging a conversation with an external party (not a coding session): use `Meeting.md`'s shape. WHEN starting a genuinely new top-level project (not a sub-note of an existing one): use `Project.md`'s shape.
+- **Smart Connections** — WHEN the user asks "what have we already decided/discussed about X" and a direct file read/grep across vault notes doesn't turn up a clear match: tell them to check Obsidian's Smart Connections/Smart Chat pane before concluding nothing exists — its semantic index isn't queryable from the CLI, so don't assert absence based on grep alone.
+- **Excalidraw** — WHEN the user wants a conceptual/whiteboard sketch: point them to Excalidraw inside Obsidian; never hand-author `.excalidraw` files (compressed binary format). WHEN the ask is a formal system/architecture diagram for the repo: use the repo's own `docs/architecture.drawio.svg` instead — that's the code-side diagram tool, Excalidraw is vault-side only.
+- **Git (obsidian-git)** — no CLI trigger. It auto-commits vault backups on its own schedule; never run git commands inside the vault directory.
+- **Calendar / Outliner / Markdown Table Editor** — no CLI trigger; standard `Daily/<YYYY-MM-DD>.md` naming and plain markdown lists/tables already satisfy all three.
+
 ## Skill Usage (HARD RULE)
 ALL installed skills and tools MUST be actively used when relevant. Don't limit to a subset — use the full arsenal wisely. Key enforcement:
 - `/ponytail` — run on EVERY implementation to force simplest solution
@@ -21,6 +31,7 @@ ALL installed skills and tools MUST be actively used when relevant. Don't limit 
 - `/verification-before-completion` — verify EVERY piece of work before marking done
 - `/clean-code-principles` + `/solid-principles` — consult on EVERY class/module design
 - `/ponytail-review` — run on EVERY PR/diff before merging
+- `/lean-ctx` — leverage context-efficient reads, compressed shell execution, and CCP session memory
 
 ## Design Principles (HARD RULE)
 Every design decision MUST be reasoned out. No implicit choices.
@@ -229,6 +240,39 @@ Before implementing any module, class, or architectural choice, document:
 - "What imports/exports does this file have?" → `graphify_imports_exports`
 - "Remember this decision for next session" → `remember`
 - "What did we decide about X?" → `recall`
+
+#### lean-ctx — Context Engineering & Memory Runtime (★ PRIMARY MCP)
+
+**MUST USE lean-ctx MCP for context-efficient reads, shell execution, and persistent session state.**
+- Shadow mode: native read/search/shell automatically routes through lean-ctx compression.
+
+**Core Context Tools:**
+- `ctx_read` — adaptive compressed file reader (`mode="full"|"map"|"signatures"|"diff"|"anchored"|"entropy"`)
+  - `mode="full"`: standard initial read (cached, subsequent reads cost ~13 tokens)
+  - `mode="map"`: dependency graph, exports, API surface (~90-95% compression)
+  - `mode="signatures"`: function/class signatures only (~85-90% compression)
+  - `mode="diff"`: changed lines since last read (~98% compression)
+  - `mode="anchored"`: adds `N:hh|` line/hash anchors for atomic editing with `ctx_patch`
+  - `mode="entropy"`: Shannon entropy filtering for information-dense blocks
+- `ctx_multi_read` — read multiple files in a single compressed context batch
+- `ctx_search` — compressed search (BM25 semantic search, regex, symbol lookups)
+- `ctx_shell` — run terminal commands with output noise filtering (strips progress bars/ansi)
+- `ctx_patch` — anchored atomic file patcher using `N:hh|` hash anchors from `ctx_read(mode="anchored")`
+- `ctx_overview` — task-relevant project map generation
+- `ctx_preload` — proactive context caching for task-relevant files
+
+**Memory & Session Continuity (CCP):**
+- `ctx_session` — cross-session memory management (`load`, `status`, `task`, `finding`, `decision`, `save`)
+- `ctx_knowledge` — permanent knowledge base operations (`remember`, `recall`, `search`, `consolidate`)
+- `ctx_agent` — multi-agent communication channel (`register`, `list`, `post`, `read`)
+- `ctx_gain` / `ctx_metrics` — inspect token savings and runtime efficiency stats
+
+**Read Mode Decision Tree:**
+- Will edit? → `ctx_read mode=full` (re-reads: 13 tokens) → after edit: `mode=diff`
+- API surface only? → `ctx_read mode=signatures`
+- Dependencies / imports / exports? → `ctx_read mode=map`
+- Editing by reference? → `ctx_read mode=anchored` then `ctx_patch`
+- Unmodified raw bytes needed? → `ctx_read raw=true` or `lean-ctx raw "<command>"`
 
 #### langchain-docs — LangChain Documentation
 - `search_docs_by_lang_chain` — search LangChain docs

@@ -65,4 +65,5 @@ bandit-report.json
 graphify-out/
 
 # Obsidian vault junction
+docs/vault
 docs/vault/
