@@ -11,41 +11,41 @@ flowchart TB
 
   subgraph Presentation["Presentation & Control"]
     CLI["CLI & Executive Digest Card Generator"]
-    SCHED["Off-Peak Cron Scheduler (Post-15:30 IST / ADR-016)"]
+    SCHED["Off-Peak Cron Scheduler\nPost-15:30 IST / ADR-016"]
   end
 
-  subgraph Harness["TypeScript Orchestration Harness (ADR-001)"]
-    M7["<b>M7 · Supervisor Orchestrator (ADR-003/022/024)</b><br/>4-Round Debate • Round Checkpointing • Volatile-Last Context<br/>Consensus Aggregation in Code • Dual-Scenario Deadlock"]
+  subgraph Harness["TypeScript Orchestration Harness\nADR-001"]
+    M7["M7 Supervisor Orchestrator\nADR-003/022/024\n4-Round Debate · Round Checkpointing\nVolatile-Last Context · Consensus in Code"]
 
-    subgraph M6_Agents["<b>M6 · Participant-Intent Agents (ADR-023)</b>"]
-      A_PRICE["Price Agent (Anchor Baseline)"]
-      A_FII["FII Intent Agent (Global Cues & F&O OI)"]
-      A_DII["DII Intent Agent (Domestic Macro & SIPs)"]
-      A_RET["Retail Intent Agent (Delivery % & News)"]
+    subgraph M6_Agents["M6 Participant-Intent Agents\nADR-023"]
+      A_PRICE["Price Agent\nAnchor Baseline"]
+      A_FII["FII Intent Agent\nGlobal Cues & FnO OI"]
+      A_DII["DII Intent Agent\nDomestic Macro & SIPs"]
+      A_RET["Retail Intent Agent\nDelivery % & News"]
     end
 
-    CAP["<b>Capability Layer (ADR-015)</b><br/>Config-driven capability binding (search, market_data, sentiment, chat)"]
+    CAP["Capability Layer ADR-015\nConfig-driven capability binding\nsearch, market_data, sentiment, chat"]
   end
 
   subgraph PyMCP["Python MCP Servers & External Capabilities"]
-    M1["<b>M1 · Market Data MCP (ADR-013/025)</b><br/>yfinance (.NS/.BO) • Indian Connectors (flows, bhavcopy, macro_in)<br/>Hampel Filter Sanitizer • 3-Day Cache Fallback"]
-    M3["<b>M3 · Search MCP (ADR-010/017)</b><br/>AnySearch • 20/run Budget • Indian Finance Domain Filter"]
-    M4["<b>M4 · Sentiment Engine (ADR-018)</b><br/>FinBERT / LLM Extraction • Exponential Recency Decay"]
-    M2["<b>M2 · LLM Client (ADR-009/014)</b><br/>DeepSeek v4-flash • Thinking Mode • 2500 Concurrency Governor"]
+    M1["M1 Market Data MCP\nADR-013/025\nyfinance .NS/.BO · Indian Connectors\nHampel Filter · 3-Day Cache Fallback"]
+    M3["M3 Search MCP\nADR-010/017\nAnySearch · 20/run Budget\nIndian Finance Domain Filter"]
+    M4["M4 Sentiment Engine\nADR-018\nFinBERT / LLM Extraction\nExponential Recency Decay"]
+    M2["M2 LLM Client\nADR-009/014\nDeepSeek v4-flash · Thinking Mode\n2500 Concurrency Governor"]
   end
 
   subgraph Execution["Execution & Evaluation Isolation"]
-    subgraph Sandbox["<b>M5 · Two-Tier Docker Sandbox (ADR-021)</b>"]
-      EXP["Tier 1: Warm Explore (PyPI allowed, 45s Timeout, Max 5 Retries)"]
-      VAL["Tier 2: Cold Clean Validate (No network, Clean image)"]
+    subgraph Sandbox["M5 Two-Tier Docker Sandbox\nADR-021"]
+      EXP["Tier 1: Warm Explore\nPyPI allowed, 45s Timeout, Max 5 Retries"]
+      VAL["Tier 2: Cold Clean Validate\nNo network, Clean image"]
     end
-    M8["<b>M8 · Read-Only Evaluation Harness (ADR-011/012)</b><br/>1: MASE on Returns • 2: Brier Calibration • 3: Cost-Adjusted Sortino<br/>4: Purged Walk-Forward CV Gate (Catastrophic fail on leak)"]
+    M8["M8 Read-Only Evaluation Harness\nADR-011/012\nMASE on Returns · Brier Calibration\nCost-Adjusted Sortino · Purged Walk-Forward CV"]
   end
 
-  subgraph Persistence["Storage & Memory (ADR-020)"]
-    PG[("PostgreSQL: Durable History & Checkpoints")]
-    PGV[("pgvector: Strategy & Pattern Semantic Memory")]
-    REDIS[("Redis: Quotas, Run-Scoped Caches & Pub/Sub")]
+  subgraph Persistence["Storage & Memory\nADR-020"]
+    PG[("PostgreSQL\nDurable History & Checkpoints")]
+    PGV[("pgvector\nStrategy & Pattern Semantic Memory")]
+    REDIS[("Redis\nQuotas, Run-Scoped Caches & Pub/Sub")]
   end
 
   %% Interactions
@@ -54,12 +54,12 @@ flowchart TB
   M6_Agents --> CAP
   CAP --> M1 & M3 & M4 & M2
 
-  M6_Agents -->|Writes Python CodeAct| EXP
-  EXP -->|Submits Best Model| VAL
-  VAL -->|Scored Validation| M8
-  M8 -->|Read-only eval mount| EXP
+  M6_Agents -->|"Writes Python CodeAct"| EXP
+  EXP -->|"Submits Best Model"| VAL
+  VAL -->|"Scored Validation"| M8
+  M8 -->|"Read-only eval mount"| EXP
 
-  M7 -->|Checkpoints & Memories (as_of <= backtest_date)| PG & PGV
+  M7 -->|"Checkpoints & Memories"| PG & PGV
   M3 & M7 --> REDIS
 ```
 
