@@ -1,7 +1,11 @@
 # Obsidian Bridge
 
-Design notes, research, and project tracking live in the Obsidian vault:
-`C:\Users\vama0\Knowledge\Projects\Forecasting Agent\`
+Design notes, research, and project tracking live in the Obsidian vault,
+accessible via a directory junction at `docs/vault/`.
+
+## Vault Location
+- **Source:** `C:\Users\vama0\Knowledge\Projects\Forecasting Agent\`
+- **Junction:** `docs/vault/` (git-ignored)
 
 ## Vault Structure
 - `Forecasting Agent.md` — project hub
