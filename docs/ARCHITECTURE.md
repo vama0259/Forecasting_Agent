@@ -325,13 +325,22 @@ Agent owns a filesystem workspace:
 - **Interaction with ADR-012:** `core/evaluation/` is mounted read-only into the sandbox; `workspace/` is writable per the split above. The eval harness boundary is enforced at the mount level, not by convention.
 - **Interaction with ADR-020:** persisted skills and models are cross-run state, so `as_of` discipline extends beyond database rows to workspace artifacts — a skill saved in June must not influence a backtest dated March.
 - **Execution Limits & Latency Governor (confirmed 2026-08-14):** **45s hard timeout** per container code execution; maximum of **5 self-debug retries** per agent in Round 1 before aborting CodeAct loop and falling back to baseline technicals.
+- **Docker Concurrency & Resource Caps (SDE III Gate, confirmed 2026-08-14):**
+  - **Async Semaphore(2):** Max 2 concurrent container executions in Round 1 to eliminate daemon contention.
+  - **Cgroups Limits:** `--cpus="1.0" --memory="512m"` hard limits per container.
+  - **Stdout Buffer Cap:** 50KB circular buffer on stdout/stderr to prevent host memory exhaustion.
 - **Status:** accepted (2026-08-14) — all decisions user-confirmed after design debate and grilling
 
 ### ADR-022: Iteration stop rule and deterministic consensus (M6/M7)
 - **Decision (stop rule):** the code-write → run → fix loop halts on **whichever comes first** — MASE improvement below a threshold over K consecutive iterations (early convergence), or an agent-level **cost ceiling** (hard stop). Bounded worst case, adaptive best case. Two parameters to tune; both are evaluation-adjacent and therefore sit on the ADR-012 read-only side.
 - **How this composes with ADR-021's two-tier sandbox:** exploration iterations score using the same read-only M8 code inside the **warm** container; the final submission re-scores in the **clean** container. Matching scores confirm no residue dependence — divergence *is* the signal. The agent gets per-iteration feedback without paying cold-start costs on every loop.
 - **Decision (consensus):** **deterministic aggregation with calibration weighting.** Sub-agents emit a structured `AgentSignal{direction, probability, confidence}`. Consensus is **computed in code** as a calibration-weighted combination, using each agent's historical calibration record from M9. The LLM writes **only the narrative** explaining the computed result.
+- **Consensus Clamping & Non-Stationary Regime Guardrails (Principal Architect Gate, confirmed 2026-08-14):**
+  - **Rolling 30-Day Window:** Calibration scores evaluated over the last 30 trading days only.
+  - **Weight Clamp (Entropy Floor):** Clamped to $[\text{Min } 15\%, \text{Max } 40\%]$ so no single agent dominates.
+  - **Volatility Shock Breaker:** If India VIX / ATR spikes $>2\times$ in 48h, auto-reset to $25/25/25/25$ equal weights.
 - **Why the supervisor must not synthesize the final number:** [[Research]] records sycophantic conformity in RLHF models at up to **85.5%**, and notes that simple majority voting discards correct answers. If the supervisor LLM freely produces the final call, that call inherits exactly the conformity the research warns about. It also contradicts the adopted FinRobot principle — *numbers are code-calculated, narratives are LLM-assisted*. Debate is where LLMs argue; **aggregation is arithmetic**. Sycophancy cannot corrupt arithmetic.
+
 - **Why calibration weighting specifically:** it makes the system self-improving in the one dimension that matters for ADR-011 layer 2 — an agent that is reliably overconfident is automatically down-weighted, using data the evaluation stack already produces. This is the self-improvement loop operating on the *consensus mechanism* rather than only on models.
 - **Cold start:** equal weights until calibration history exists. **Risk to watch:** early luck entrenching an agent's weight before its record is statistically meaningful — needs a minimum-sample threshold before weights diverge from equal.
 - **Cost:** the mechanism cannot weigh a genuinely *better argument*, only stated confidences. A well-designed `AgentSignal` schema is required up front, and it is expensive to change later because it is the debate's wire format and the input to ADR-011's scoring.
