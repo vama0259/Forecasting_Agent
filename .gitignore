@@ -25,6 +25,7 @@ lerna-debug.log*
 
 # Skills & agents
 .agents/
+.claude/
 skills-lock.json
 
 # Setup scripts
