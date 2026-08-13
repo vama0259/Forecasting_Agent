@@ -1,1 +1,3 @@
-# Forecasting_Agent
+# Forecasting Agent
+
+Private forecasting agent project.
