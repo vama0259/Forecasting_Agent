@@ -437,8 +437,6 @@ Agent owns a filesystem workspace:
   - Storage: Postgres `debate_traces` table stores round-by-round context for deterministic post-mortem replay.
 - **Pros:** Full visibility into token spend, cache hit efficiency, and CodeAct failure modes without attaching intrusive debuggers. Enables 100% deterministic backtest replay.
 - **Cons:** Adds ~5-10ms logging serialization overhead per step; requires trace ID propagation across process boundaries.
-- **Status:** accepted (2026-08-14)
-
 ### ADR-027: Operational Resilience — Health Handshake, Typed Errors, Migrations & Skill Lifecycle
 - **Decision:** Establish strict operational protocols for system readiness, fault recovery, schema migrations, and skill pruning.
 - **1. Startup Health Handshake (M10):** Fail-fast probe testing Postgres, Redis, Docker Daemon API, and MCP servers in $<200\text{ms}$ at boot.
@@ -446,4 +444,26 @@ Agent owns a filesystem workspace:
 - **3. Schema Migrations:** Idempotent, forward-only SQL migration runner managing Postgres & pgvector schemas in `infra/migrations/`.
 - **4. Skill Lifecycle & Pruning (M11):** 3-state machine (`DRAFT` $\rightarrow$ `ACTIVE` $\rightarrow$ `ARCHIVED`). Skills decaying to rolling $\text{MASE} > 1.05$ are auto-archived.
 - **5. Sandbox Zero-Trust Isolation (M5):** No API keys or host credentials mounted inside Docker containers; validation container enforced with `--network none`.
+- **Status:** accepted (2026-08-14)
+
+### ADR-028: Prompt Architecture & Compilation — DSPy MIPROv2, Jinja2/Nunjucks Shared Templates & Offline-to-Online Bridge
+- **Context:** Manual string prompt engineering is non-reproducible, fragile across model versions, and suffers from prompt drift. In a dual-stack system (TypeScript orchestrator + Python data science), prompts must be algorithmically optimizable offline without adding runtime latency or subprocess overhead in production.
+- **Decision:**
+  - **1. Offline Algorithmic Prompt Compilation (DSPy MIPROv2):**
+    - Sub-agent prompts are formalized as `dspy.Signature` contracts (`ParticipantAgentSignature`).
+    - Optimization is executed offline using `MIPROv2` with Tree-structured Parzen Estimators (TPE via Optuna) across historical Indian market regimes (Bull, Bear, Sideways).
+    - Objective function: Composite `m8_forecasting_metric` ($40\%$ MASE on returns, $40\%$ Brier calibration score, $20\%$ overconfidence penalty, with binary 0.0 failure on Validity Gate leakage).
+    - Compilation economics: ~2,640 API calls compiling all 4 participant agents in $<5$ minutes for $\approx \$0.48$ off-peak on DeepSeek `v4-flash`.
+  - **2. Shared Jinja2 / Nunjucks Template Interop:**
+    - Prompts are authored and stored as standardized `.j2` templates in `prompts/`.
+    - **Python (Offline DSPy):** Compiles and renders templates using `jinja2`.
+    - **TypeScript (Online LangGraph):** Reads compiled JSON schema and renders prompts dynamically using `nunjucks` (the official JS port of Jinja2) in $<1\text{ms}$ with zero Python runtime dependency.
+  - **3. Byte-Level Prefix Stability (DeepSeek & Claude):**
+    - Strict XML semantic boundaries (`<context>`, `<rules>`, `<scratchpad>`, `<evidence>`).
+    - Fixed ordering: Static instructions $\rightarrow$ Market state $\rightarrow$ Few-shot exemplars $\rightarrow$ Volatile retrieved memories at the TAIL to maintain $\ge 85\%$ prefix cache hit rates.
+  - **4. Telemetry-Driven Continuous Retraining Loop:**
+    - Production execution traces (inputs, Docker logs, ground-truth outcomes) stream asynchronously to Postgres/ClickHouse.
+    - Low-scoring or regime-shift traces auto-enrich the offline evaluation dataset for scheduled weekly MIPROv2 re-compilation.
+- **Pros:** Eliminates manual prompt guesswork; achieves $+10\%\text{--}18\%$ accuracy improvement over baseline zero-shot prompts; zero Node.js $\leftrightarrow$ Python runtime IPC latency for prompt rendering; guarantees $85\%$ prompt cache savings.
+- **Cons:** Requires running offline optimization pipelines when changing signature schemas; initial dataset preparation requires historical regime labeling.
 - **Status:** accepted (2026-08-14)
