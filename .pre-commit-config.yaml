@@ -25,3 +25,19 @@ repos:
       - id: bandit
         args: [-c, pyproject.toml]
         additional_dependencies: ["bandit[toml]"]
+
+  - repo: local
+    hooks:
+      - id: harness-eslint
+        name: eslint (harness)
+        entry: bash -c 'cd harness && pnpm eslint --no-warn-ignored "$@"' --
+        language: system
+        files: ^harness/.*\.ts$
+        pass_filenames: false
+
+      - id: harness-prettier
+        name: prettier (harness)
+        entry: bash -c 'cd harness && pnpm prettier --check "src/**/*.ts" "tests/**/*.ts"'
+        language: system
+        files: ^harness/.*\.ts$
+        pass_filenames: false
