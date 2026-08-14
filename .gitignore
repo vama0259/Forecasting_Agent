@@ -75,3 +75,4 @@ graphify-out/
 # Obsidian vault junction
 docs/vault
 docs/vault/
+harness/.sandbox-test-tmp/
