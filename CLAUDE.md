@@ -294,6 +294,21 @@ Self-hosted MCP server (`~/mcp-servers/agy-mcp`, registered user-scope) wrapping
 - Default delegation call: `run_agy(prompt=..., add_dirs=[...], mode="accept-edits")` — no `model`/`effort` needed to get Gemini 3.7 Flash (High) in this environment
 - **Autonomy grant**: same as `codex` — Gemini controls and spends its own tokens/tool-calls for bash commands it runs during `mode="accept-edits"` delegation (tests, repo checks, edits). Claude does not gate each individual `agy` bash invocation. The mandatory post-delegation verification pass (`gemini-delegated-implementation` skill) is the sole final gate before Gemini's output is accepted — Gemini never self-approves its own work.
 
+##### Gemini delegation — known quality gap (observed #4–#9)
+
+Gemini's own self-reported "tests pass" / "all green" claims have repeatedly diverged from reality: a false "41/41 passed" claim (#8) where a re-run found real failures from a non-idempotent test; #7's own commit log shows "verification pass — real Docker run surfaces 4 bugs Gemini's tests missed"; an untested `<50ms` acceptance criterion went unverified through 6 tasks; a missing `pyarrow` dependency silently broke a feature until a real round-trip test caught it; uncommitted test files were missed until a manual `git status` check.
+
+**Pattern**: Gemini's tests passing is not evidence the feature works — its own test suites have repeatedly failed to exercise the real failure mode (real Docker daemon behavior, repeat-run state, declared dependencies, acceptance-criteria timing). The gap is specifically between "unit-level mocked tests green" and "actual runtime/integration behavior correct."
+
+**Required check system going forward, every Gemini delegation, no exceptions:**
+1. Never accept "tests pass" as reported — re-run the exact test command from a cold shell yourself.
+2. For anything touching Docker/external processes/timing-sensitive code: separately verify against the real system (real container, real repeat run, real clock), not just the mocked test suite.
+3. Explicitly check declared dependencies (`package.json`/`pyproject.toml`) were actually updated, not just imported and working locally in Gemini's one run.
+4. Run `git status` after every delegation before considering it done — check for both missing commits (uncommitted test files) and out-of-scope writes (Gemini has written unprompted to the Obsidian vault outside its stated file boundaries at least once, harmlessly, but it's a real scope violation each time).
+5. Re-run any numeric acceptance criterion (latency, size, count) with a real measurement — don't accept "should be under X" without measuring X.
+
+This reinforces why the "verify inline, never dispatch a separate validator subagent, never trust a self-report" rule exists — it's not caution for its own sake, it's a response to a specific, repeated, observed failure mode.
+
 #### codex — OpenAI Codex CLI Bridge (installed, not in the default spec loop)
 
 Registered user-scope via `codex mcp-server` (stdio, `claude mcp add --scope user codex -- codex mcp-server`). Requires `codex login` first — check `codex mcp list` shows `✔ Connected`, not `! Needs authentication`, before delegating.

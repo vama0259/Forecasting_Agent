@@ -37,7 +37,7 @@ Where LLM agents actually belong — better at "65% confident" than at "₹2,847
 
 | Metric | What it does | Verdict |
 |---|---|---|
-| **Brier score** | Squared error on a probability | ✅ **Chosen (ADR-011 layer 2).** Comparable to ForecastBench numbers in [[Research]] |
+| **Brier score** | Squared error on a probability | ✅ **Chosen (ADR-011 layer 2).** Score against an *internal* naive baseline — see the correction below |
 | Log loss | Punishes confident-and-wrong harshly | ✅ Good anti-overconfidence pressure on an LLM |
 | CRPS | Brier generalized to full distributions | ✅ Gold standard if agents emit distributions rather than points |
 | Pinball / quantile loss | Scores interval forecasts | ✅ For "80% chance between X and Y" |
@@ -45,6 +45,22 @@ Where LLM agents actually belong — better at "65% confident" than at "₹2,847
 | PICP | Do 90% intervals contain truth 90% of the time? | ✅ Interval-honesty check |
 
 Brier decomposes into **calibration + refinement**, which distinguishes "badly calibrated" from "genuinely uninformative".
+
+### ⚠️ Correction, 2026-08-14 — the ForecastBench comparison was wrong
+
+An earlier version of this note, and of [[Architecture|ADR-011]], said our Brier score would be "directly comparable" to the ForecastBench figures in [[Research]] — superforecasters 0.096, general public 0.121, LLMs 0.122–0.136. **It isn't.**
+
+Murphy's decomposition is why: `BS = reliability − resolution + uncertainty`, and the **uncertainty** term is a property of the *question set's base rate*, not of the forecaster. So a raw Brier score is only comparable across the same question set. ForecastBench is geopolitical/Metaculus-style questions with varied base rates. Five-day equity direction sits near a coin flip, where **0.25 is free** for answering "50%" every time, and 0.096 is likely unreachable by anyone. Aiming at 0.096 would be aiming at a number that does not exist in this domain.
+
+**The fix is the same one layer 1 already uses.** MASE works because the naive baseline is inside the number. Do the same here — the standard name is the **Brier Skill Score**:
+
+```
+BSS = 1 − BS_model / BS_reference
+```
+
+where `BS_reference` is a naive constant forecaster on **our own** question set (always "up" at the historical base rate, ~52% for NSE large caps). `BSS > 0` means real skill; the magnitude says how much. Defined concretely in #9's pre-registration.
+
+ForecastBench stays useful as context on how LLMs calibrate in general. It is not a target, and it never was a valid one.
 
 ## D — Economic ("did it make money")
 
@@ -61,7 +77,16 @@ Brier decomposes into **calibration + refinement**, which distinguishes "badly c
 
 Score the *system*, not the forecast:
 
-- **Skill vs baseline** — does the agent beat naive *and* plain ARIMA? If not, the agent layer is decoration
+- **Skill vs baseline** — a **four-rung ladder**, extended 2026-08-14 by [[Architecture|ADR-029]]:
+
+  ```
+  naive  →  ARIMA  →  standard factor model  →  our agent
+                              ↑
+                 ADR-023's participant thesis is
+                 adjudicated HERE, not at rung 1
+  ```
+
+  This note previously stopped at ARIMA. That is enough to answer "is the agent layer decoration?", but **not** enough to answer the question the whole project rests on: *do participant-intent features carry edge, or would any decent feature set have done the same?* Beating naive proves features beat no features. Only rung 3 — a standard time-series factor model on the same symbol — separates the moat from generic competence. The factor baseline is read-only to the agent ([[Architecture|ADR-012]]); an agent able to edit its own benchmark can lower its own bar, and that failure is as silent as a leaky split.
 - **Regime consistency** — accuracy split across bull / bear / sideways. Single-regime performance is a bull-market artifact
 - **Cost per forecast** — the reason for the DeepSeek switch ([[Architecture|ADR-009]]); needs measuring, not assuming
 - **Latency per forecast** — required before any latency optimization work
