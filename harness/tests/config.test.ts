@@ -30,6 +30,12 @@ capabilities:
   search: web
   sentiment: llm
   market_data: market
+storage:
+  connection_string: postgres://localhost:5432/harness_test
+tracing:
+  langfuse_public_key: pk-test
+  langfuse_secret_key: sk-test
+  langfuse_base_url: http://localhost:3000
 `;
 
 beforeEach(() => {
