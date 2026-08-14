@@ -9,6 +9,9 @@ node_modules/
 dist/
 coverage/
 
+# Data server runtime cache (ParquetCache default dir)
+/data/cache/
+
 # Logs
 logs
 *.log
