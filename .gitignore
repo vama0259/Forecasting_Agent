@@ -4,6 +4,11 @@
 /build
 /tmp
 
+# Node (harness/)
+node_modules/
+dist/
+coverage/
+
 # Logs
 logs
 *.log
