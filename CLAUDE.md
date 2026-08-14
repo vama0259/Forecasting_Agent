@@ -31,12 +31,12 @@ ALL installed skills and tools MUST be actively used when relevant. Don't limit 
 - `/verification-before-completion` — verify EVERY piece of work before marking done
 - `/clean-code-principles` + `/solid-principles` — consult on EVERY class/module design
 - `/ponytail-review` — run on EVERY PR/diff before merging
-- `reviewing-specs` — run on EVERY spec/ADR/plan before implementation; loops verify → ponytail → grill until the SDE III reviewer returns `APPROVED` twice
-- `spec-reviewer` (agent, HARD RULE) — after writing or materially editing ANY spec/ADR/plan, dispatch this agent BEFORE implementation, before committing it, and before `writing-plans`. Never self-approve a spec you authored. It exits only on two consecutive `APPROVED` verdicts; anything else means another round.
+- **Token-efficiency mode (HARD RULE, overrides subagent dispatch below where noted)** — spec authorship, spec review, and plan writing run **inline in the main session**, not as dispatched `Agent`/`Task` subagents. Same rigor (`reviewing-specs`' verify→ponytail→grill loop, two consecutive `APPROVED` verdicts, evidence over assertion), just without the token overhead of a fresh subagent context per round. Only **implementation** is delegated out, and directly to Gemini via `agy` (`gemini-delegated-implementation`) — not the heavier `gemini-plan-implementation` multi-subagent pipeline (Haiku/Sonnet validator dispatch). Validate Gemini's output inline instead of via a dispatched validator subagent.
+- `reviewing-specs` — run on EVERY spec/ADR/plan before implementation; loops verify → ponytail → grill until the SDE III reviewer returns `APPROVED` twice. Run this inline (see Token-efficiency mode) — do not dispatch the `spec-reviewer` agent as a background/subagent call.
+- **Spec authorship (HARD RULE, revised)** — Claude authors and revises every round of every spec **inline, in this session**. Do not delegate spec drafting or revision to Codex or any other external tool.
 - `/lean-ctx` — leverage context-efficient reads, compressed shell execution, and CCP session memory
-- `gemini-delegated-implementation` (model-invoked) — WHEN implementation splits into independent, well-specified chunks: delegate to Gemini 3.7 Flash (High) via `agy`, fan out in parallel worktrees, then verify every result before accepting — never skip the verification pass
-- `gemini-plan-implementation` (model-invoked) — WHEN a plan's tasks are independent enough to delegate: full spec→merge pipeline (`reviewing-specs` → `writing-plans` → per chunk: `codebase-design` seam check → `test-driven-development` tests-first → Gemini implements → Haiku validates, escalating to Sonnet on failure → `systematic-debugging` before any corrective round) → `dispatching-parallel-agents` fan-out → `finishing-a-development-branch`
-- `gemini-plan-writer` (agent, HARD RULE) — EVERY time an implementation plan is written, dispatch this agent instead of writing the plan inline via `writing-plans` directly. No exceptions, no "just this once inline plan." Requires the spec already cleared `spec-reviewer`; if it hasn't, run that first — do not write the plan around it. Produces each task pre-loaded with a seam note, a real failing test (run, watched red), a ready-to-paste Gemini delegation prompt, and a validator brief, so the execution loop needs no re-derivation.
+- `gemini-delegated-implementation` (model-invoked) — the standard implementation path once a plan exists: delegate directly to Gemini 3.7 Flash (High) via `agy`, fan out in parallel worktrees for independent chunks, then verify every result **inline** before accepting — never skip the verification pass, never dispatch a separate validator subagent for it.
+- `writing-plans` — write the implementation plan **inline** (see Token-efficiency mode), not via a dispatched `gemini-plan-writer` agent. Requires the spec already cleared `reviewing-specs`' two-`APPROVED` gate; if it hasn't, run that first. Each task still needs a seam note, a real failing test (run, watched red), a ready-to-paste Gemini delegation prompt, and a validator brief — same output shape, produced inline instead of by a subagent.
 
 ## Design Principles (HARD RULE)
 Every design decision MUST be reasoned out. No implicit choices.
@@ -112,9 +112,8 @@ Before implementing any module, class, or architectural choice, document:
 - `/grill-me` — same interview, user-invoked only (type it yourself; Claude cannot trigger it)
 - `/lean-ctx` — context-efficient coding patterns
 - `/graphify` — build knowledge graph from codebase, query it, trace paths
-- `gemini-delegated-implementation` — delegate parallelizable implementation to Gemini 3.7 Flash (High) via `agy`, then verify (model-invoked)
-- `gemini-plan-implementation` — full plan pipeline: Gemini implements, Haiku→Sonnet escalating subagents validate, parallel dispatch per chunk (model-invoked)
-- `gemini-plan-writer` — agent that writes plans pre-structured for `gemini-plan-implementation` (seam note + failing test + Gemini prompt + validator brief per task)
+- `gemini-delegated-implementation` — the standard implementation path: delegate to Gemini 3.7 Flash (High) via `agy`, verify inline, no subagent dispatch (model-invoked)
+- `gemini-plan-implementation` / `gemini-plan-writer` — the heavier multi-subagent pipeline variant. Superseded by inline spec/plan authorship + direct `gemini-delegated-implementation` per the Token-efficiency mode rule; keep installed but do not dispatch by default
 
 ### Platform Skills (always available, no install needed)
 
@@ -293,6 +292,14 @@ Self-hosted MCP server (`~/mcp-servers/agy-mcp`, registered user-scope) wrapping
 - `list_agy_agents` / `list_agy_models` — **unreliable in this sandbox, hang indefinitely** — don't rely on these for live discovery
 - **`--model` fails silently on any non-exact match** (verified) — no error, just keeps whatever model the session already defaulted to. Local default is already Gemini 3.7 Flash (High); omit `model` entirely, or use the exact string `"Gemini 3.7 Flash (High)"` (not `--effort`, which hard-errors on Gemini models). Full details in `gemini-delegated-implementation` skill.
 - Default delegation call: `run_agy(prompt=..., add_dirs=[...], mode="accept-edits")` — no `model`/`effort` needed to get Gemini 3.7 Flash (High) in this environment
+- **Autonomy grant**: same as `codex` — Gemini controls and spends its own tokens/tool-calls for bash commands it runs during `mode="accept-edits"` delegation (tests, repo checks, edits). Claude does not gate each individual `agy` bash invocation. The mandatory post-delegation verification pass (`gemini-delegated-implementation` skill) is the sole final gate before Gemini's output is accepted — Gemini never self-approves its own work.
+
+#### codex — OpenAI Codex CLI Bridge (installed, not in the default spec loop)
+
+Registered user-scope via `codex mcp-server` (stdio, `claude mcp add --scope user codex -- codex mcp-server`). Requires `codex login` first — check `codex mcp list` shows `✔ Connected`, not `! Needs authentication`, before delegating.
+
+- **Superseded by the Token-efficiency mode rule above: spec authorship and every revision round are Claude-authored, inline, in this session — Codex is not used for spec drafting or revision by default.** Kept registered for explicit one-off use if the user asks for it by name.
+- If invoked deliberately: model `gpt-5.6` codename `luna`, effort `medium`.
 
 #### langchain-docs — LangChain Documentation
 - `search_docs_by_lang_chain` — search LangChain docs
@@ -350,7 +357,7 @@ Self-hosted MCP server (`~/mcp-servers/agy-mcp`, registered user-scope) wrapping
 
 ## Code Style
 - Python 3.12, Ruff for linting/formatting, 120 char line length
-- No comments unless the WHY is non-obvious
+- **Comments (HARD RULE, overrides "no comments unless WHY is non-obvious")**: every file must own a one-line abstract at the top explaining what the file does as a whole. Every function/method must have a one-line comment stating its input and output (what it takes, what it returns) — not a restatement of the body. Keep each to a single line; do not add multi-line docstrings or narrate the implementation.
 - Security: Bandit clean, no secrets in code
 - Use `/ponytail` mindset: simplest solution that works (YAGNI within SOLID)
 - All commands via `uv run` (not bare `python`/`pip`)
