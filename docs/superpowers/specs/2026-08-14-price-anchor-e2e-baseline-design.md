@@ -10,11 +10,15 @@ parent: "[[Forecasting Agent]]"
 **Story:** GitHub #9 — Story 6 (MILESTONE): Single-Agent End-to-End Baseline
 **Implements:** ADR-002 (Deep Agents shell), ADR-023 (price anchor agent, M6), ADR-014 (LLM client)
 **Milestone:** MVP 1 — Indian Equities & Derivatives — **the critical integration gate**
-**Depends on:** #4 ✅ merged · #5 ✅ merged · #6 ✅ merged · #7 ❌ not yet built · #8 ✅ merged
+**Depends on:** #4 ✅ merged · #5 ✅ merged · #6 ✅ merged · #7 ✅ merged (PR #18, `5a99b04`) · #8 ✅ merged
 
-## Scope and a hard boundary
+## Update (2026-08-14, post-#7-merge): this spec is now fully implementable
 
-This spec covers the **design only** — `price-anchor.ts` and `single-agent.ts`'s architecture, interfaces, and everything buildable without a sandbox. **It does not implement or test sandbox execution.** Issue #9's own acceptance criteria ("Explore sandbox executes model," "Validate sandbox reproduces results") are gated on #7, which does not exist yet. Building the sandbox-execution path now would mean building against an interface nobody has committed to — the spec instead defines the exact seam #7 must satisfy, so implementation can start the moment #7 lands without redesigning anything.
+`#7` merged. Re-verified decisions 2, 6, and 7 against the real merged code (`harness/src/sandbox/manager.ts`, `types.ts`), not the Kanban's summary. **Decision 7 was correct as originally written — the bridge is real.** **Decision 2 was wrong** and is corrected below: `SandboxManager` does not implement `deepagents`' `SandboxBackendProtocol`. The scope boundary from the original design-only pass no longer applies; this spec is ready for the `reviewing-specs` loop and implementation.
+
+## Scope
+
+`price-anchor.ts` and `single-agent.ts`'s architecture, interfaces, and full sandbox-execution wiring against the real `SandboxManager` API.
 
 ## What already exists, verified against the real merged code, not assumed
 
@@ -28,7 +32,7 @@ This spec covers the **design only** — `price-anchor.ts` and `single-agent.ts`
 
 1. **`deepagents` is a real, substantial framework — verified its actual API, not assumed.** Installed `deepagents@1.12.3` (ADR-002's chosen package) and inspected its exports directly: `createDeepAgent({ model, backend, tools, stateSchema }).invoke({ messages })`. This is far more than "a basic LangGraph agent node" (the issue's phrasing) — it ships filesystem tools, subagent spawning, memory middleware, and summarization out of the box. Building `price-anchor.ts` as a thin `createDeepAgent()` config, not a hand-rolled LangGraph node — reinventing what the framework already provides would contradict ADR-002 itself.
 
-2. **The sandbox integration point is `deepagents`' own `backend` parameter, not a custom call site — a real architectural finding.** `createDeepAgent`'s own JSDoc example passes `backend: sandbox` directly, and the package exports `BaseSandbox`, `SandboxBackendProtocol`-shaped types, `isSandboxProtocol`, `adaptSandboxProtocol`. **This means #7's Docker sandbox needs to implement `deepagents`' `SandboxBackendProtocol` (`execute()`, `id`, `close()`, per the shape already documented in this session's earlier LangChain research), not sit beside the agent as a separate service the pipeline calls manually.** This is worth surfacing to whoever builds #7 explicitly — it changes what "the sandbox" needs to expose.
+2. **[REVISED — verified against the real installed `deepagents` `.d.ts`, not memory] `SandboxManager` does not implement `deepagents`' sandbox protocol, and the protocol itself is bigger than "execute/id/close."** Read `agent-JA9TGZlt.d.ts` directly: `SandboxBackendProtocolV1` is `@deprecated`; the current `SandboxBackendProtocolV2` extends `BackendProtocolV2`, which requires a full filesystem surface — `ls`, `read`, `readRaw`, `write`, `grep`, `glob`, plus `execute(command: string)`, `readonly id`, `uploadFiles`, `downloadFiles`. There is **no `close()` method anywhere in the protocol** — the original draft's claim was wrong, not just incomplete. The package also exports an abstract `BaseSandbox` class that `implements SandboxBackendProtocolV2` and provides `ls`/`read`/`write`/`grep`/`glob` for free (built on POSIX shell via `execute()`, per its own doc comment — "works on any Linux including Alpine, no Python or Node.js needed"), leaving only `id`, `execute()`, `uploadFiles()`, `downloadFiles()` as abstract. `#9` writes `harness/src/sandbox/deepagents-adapter.ts`: `class SandboxBackendAdapter extends BaseSandbox`, backed by a `SandboxManager` instance. `execute(command)` calls `sandboxManager.runExplore({ runId, tier: 'explore', code: command })` and maps `ExecutionResult` (`stdout`, `stderr`, `exitCode`) to `ExecuteResponse` (`output: stdout + stderr`, `exitCode`, `truncated: stdoutTruncated || stderrTruncated`) — note `execute()`'s doc comment calls `command` a "shell command," while `runExplore`'s warm container runs it as Python source (`cat > /tmp/script.py && python /tmp/script.py`); this spec assumes `deepagents` always sends Python here since the agent's tool-use prompt will instruct it to (open item for implementation to confirm against a real `.invoke()` trace, not assumed). `id` returns the `runId` the adapter was constructed with. `uploadFiles`/`downloadFiles` are needed for `BaseSandbox`'s abstract surface but have no natural `SandboxManager` equivalent (its warm container is bind-mounted at creation, not written to post-hoc) — implemented as no-ops returning empty success arrays for this story, since the price-anchor agent's prompt only ever calls `fetch_ohlcv` + writes/executes one script, never uploads a file separately; flagged as a real limitation if a later story needs it. There is no `close()` to implement (protocol doesn't have one) — the adapter instead exposes a plain `dispose()` method that `single-agent.ts` calls explicitly (Data Flow step 9), delegating to `sandboxManager.disposeRun(runId)`.
 
 3. **`AgentSignal` is the wire format, not an ad-hoc result object.** ADR-023 defines it precisely: `{ direction, probability, confidence, horizon_days, evidence[], dissent? }` — this is simultaneously the debate wire format for #11 (not this story) *and* ADR-011's scoring input. The price agent's output must conform to this shape now, even though #9 never debates, because #6's `evaluate()` and #8's `saveAgentSignal()` are both built to consume it — building something else means a second translation layer nobody asked for.
 
@@ -36,23 +40,31 @@ This spec covers the **design only** — `price-anchor.ts` and `single-agent.ts`
 
 5. **MCP tool loading uses `langchain-mcp-adapters`, not a hand-rolled `cap()` call inside the agent.** Verified during #5's spec work: `MultiServerMCPClient.getTools()` returns LangChain-native tool objects derived directly from the MCP server's schema. `price-anchor.ts` builds its `tools` array this way and passes it to `createDeepAgent({ tools })` — the agent calls `fetch_ohlcv` as a normal tool call, not through a special-cased capability-registry code path. `cap('market_data')` (issue's literal phrasing) resolves *which* MCP server to connect the client to; it is not itself the tool-calling mechanism.
 
-6. **Issue's "1 retry" self-debug requirement is a `deepagents` middleware concern, not hand-written retry logic.** `deepagents` ships `createSubAgentMiddleware`/async subagent patterns and the framework's own execution loop already re-invokes on tool error within a single `.invoke()` call when the model is instructed to retry. Confirming the exact middleware/prompt shape for "1 retry, then stop" is deferred to implementation (needs #7's real error shape to design the retry-trigger condition against) — noted as an open item, not designed blind.
+6. **[REVISED post-#7-merge] Real error shapes now known — retry logic designed against them, not blind.** `types.ts` exports exactly three error classes: `SandboxTimeoutError` (exec exceeded the 45s hard timeout — not worth retrying, the model's code itself was too slow), `ValidationFailedError` (has a `.detail: string` field carrying the parsed `__EVAL_RESULT__` failure payload — the model/M8 pipeline failed on its own terms, e.g. a bad forecast, and *is* worth one retry with `.detail` fed back into the agent's next turn as tool-error context), and `SandboxError` (has an optional `.exitCode` — generic Docker/infra failure, e.g. daemon unreachable or OOM; not worth retrying, it's not the model's fault). Retry policy: catch `ValidationFailedError` from the `runValidate()` call (Data Flow step 7), re-invoke the agent once with `.detail` appended to context, then accept whatever the second attempt produces — matching issue #9's "1 retry, self-debug." `SandboxTimeoutError`/`SandboxError` propagate immediately, no retry.
 
-7. **There is currently no way for the TypeScript harness to call `evaluate()` at all — a real, previously-undiscovered architectural gap, not a design choice within this spec's power to resolve alone.** Checked directly: `evaluate()` lives in `src/forecasting_agent/evaluation/`, a pure Python package with "zero first-party imports outside evaluation package" (#6's own stated invariant) — no MCP server, no HTTP wrapper, nothing. `single-agent.ts` is TypeScript. Issue #6's body never addresses how the harness reaches it; issue #9's subtasks say "M8 evaluation scores the model" as if the bridge already exists. It doesn't. Two obvious options, neither designed here since this affects #11 too (the debate protocol also needs to score signals) and shouldn't be decided inside a single story's spec: (a) wrap `evaluate()` as its own MCP server, matching #5's pattern exactly — consistent with ADR-015's "everything external is a capability," but a new service to run; (b) a Node `child_process` call into a small Python CLI wrapper — less infrastructure, but reintroduces the subprocess-boundary error handling #5's MCP approach was chosen specifically to avoid (ADR-013's rationale: "MCP was selected over an HTTP service to keep one integration pattern for all external data"). Flagged on the Kanban as a cross-story architectural decision needed before #9 (or #11) can actually be implemented, not silently assumed away.
+7. **[CONFIRMED post-#7-merge] `SandboxManager.runValidate()` genuinely is the TypeScript-harness-to-`evaluate()` bridge — verified directly against the real implementation, not the Kanban's self-report.** Read `manager.ts:97-172` directly: `runValidate()` creates a fresh `--network none` container from the `forecasting-sandbox:latest` image, binds the model script read-only plus `${repoRoot}/src/forecasting_agent:/workspace/m8/forecasting_agent:ro` (the comment on this line explicitly notes the whole package, not just `evaluation/`, must be mounted for `import forecasting_agent.evaluation` to resolve), runs `python /entrypoints/validate.py`, and parses the last stdout line starting with `__EVAL_RESULT__` as JSON, validated by `EvalResultSchema` (`{ verdict, layers, layer_means }`). This is a real, working container-boundary bridge — option (a) from the original draft's undecided pair, effectively, but scoped as a fixed evaluation entrypoint rather than a general MCP server. `single-agent.ts` calls `sandboxManager.runValidate({ runId, tier: 'validate', modelScriptPath })` directly; no separate MCP wrapper needed for this story. Overhead is one cold container per validate call (~1-2s, unmeasured precisely — should be measured during implementation, not assumed) — acceptable for #9's single-run scope; whether #11's higher-volume debate protocol needs something lighter-weight is out of scope here and stays on the Kanban as a follow-up, not blocking this story.
 
 ## Structure
 
 ```
+harness/src/sandbox/
+  deepagents-adapter.ts   SandboxBackendAdapter extends BaseSandbox: id -> runId,
+                          execute(command) -> runExplore({code: command}), uploadFiles/downloadFiles
+                          -> no-op stubs (unused by this story), dispose() -> disposeRun (not part
+                          of the protocol -- called explicitly by single-agent.ts, see decision 2)
 harness/src/agents/
-  price-anchor.ts        createDeepAgent() config: model, tools, backend (interface, see decision 2),
+  price-anchor.ts         createDeepAgent() config: model, tools, backend: new SandboxBackendAdapter(...),
                           stateSchema for AgentSignal output
 harness/src/pipeline/
-  single-agent.ts         orchestrates: fetch data -> agent.invoke() -> [SANDBOX BOUNDARY] ->
-                          evaluate() -> repository.save*() -> langfuse trace, wrapping the whole run
+  single-agent.ts         orchestrates: fetch data -> agent.invoke() (explore tier, via adapter) ->
+                          runValidate() (validate tier, direct call) -> repository.save*() ->
+                          langfuse trace, wrapping the whole run
 harness/tests/e2e/
-  single-agent.test.ts     tests everything up to and after the sandbox boundary; the boundary
-                          itself is mocked against the SandboxBackendProtocol shape (decision 2),
-                          not against real Docker — that's #7's own test suite's job
+  single-agent.test.ts    mocks MultiServerMCPClient.getTools(); SandboxManager is constructed with
+                          an injected `dockerImpl` mock (SandboxManager's constructor already accepts
+                          this for tests) following the makeMockDocker() helper pattern from #7's own
+                          harness/tests/sandbox/manager-concurrency.test.ts, reused rather than
+                          re-invented — real Docker daemon calls stay in #7's own test suite
 ```
 
 ## Data Flow
@@ -63,7 +75,9 @@ single-agent.ts orchestration, wrapped in one Langfuse trace (forecast_run):
   2. trace = langfuse.trace({ name: 'forecast_run', id: traceId })
   3. mcpClient = MultiServerMCPClient({ market_data: <cap('market_data') config> })
      tools = await mcpClient.getTools()
-  4. agent = createDeepAgent({ model: ChatDeepSeek(config.llm), tools, backend: sandbox })
+  4. sandboxManager = new SandboxManager()
+     adapter = new SandboxBackendAdapter(sandboxManager, runId)   [see decision 2]
+     agent = createDeepAgent({ model: ChatDeepSeek(config.llm), tools, backend: adapter })
                                                                        [span: debate_round — reused
                                                                         as "agent_turn" here since
                                                                         this story has one agent,
@@ -71,31 +85,50 @@ single-agent.ts orchestration, wrapped in one Langfuse trace (forecast_run):
                                                                         multi-agent nesting later]
   5. result = await agent.invoke({ messages: [<prompt: write exp-smoothing forecast for
      RELIANCE.NS>] })
-     -- internally, the agent calls fetch_ohlcv via its tools, writes Python, and calls the
-        sandbox via `backend` -- all inside this one invoke()                [span: tool_call]
+     -- internally, the agent calls fetch_ohlcv via its tools, writes Python, and the adapter
+        routes each execute() call to sandboxManager.runExplore() (warm/PyPI tier)  [span: tool_call]
   6. signal: AgentSignal = <parse result into ADR-023's schema>
-  7. evalResult = <call evaluate() via whichever bridge decision 7 resolves to -- NOT a direct
-     import, evaluate() is Python and this file is TypeScript, no bridge exists yet>
+     modelScriptPath = <write the agent's final Python to a temp file on the host>
+  7. try {
+       evalResult = (await sandboxManager.runValidate({ runId, tier: 'validate', modelScriptPath }))
+         .evalResult
+     } catch (err) {
+       if (err instanceof ValidationFailedError) {
+         // 1 retry, self-debug: re-invoke with the failure detail as context, per decision 6
+         result = await agent.invoke({ messages: [...prev, { role: 'user', content: err.detail }] })
+         signal = <re-parse>; modelScriptPath = <rewrite>
+         evalResult = (await sandboxManager.runValidate({ runId, tier: 'validate', modelScriptPath }))
+           .evalResult   // second failure propagates, no further retry
+       } else throw err   // SandboxTimeoutError / SandboxError: not retried
+     }
   8. await repository.saveForecast(pool, { ...signal, asOf: <as-of date> })
      await repository.saveAgentSignal(pool, { ...signal, asOf: <as-of date> })
      await repository.saveEvalResult(pool, evalResult)
-  9. trace ends; span.update() attaches cost/token fields (issue's "cost tracking" subtask from
-     #8, deferred there, lands here since this is the first place a real invoke() produces them)
+  9. await adapter.dispose() [-> sandboxManager.disposeRun(runId)]; trace ends; span.update()
+     attaches cost/token fields
+     (issue's "cost tracking" subtask from #8, deferred there, lands here since this is the first
+     place a real invoke() produces them)
 ```
 
-## Testing (design-scope — no sandbox execution tested here)
+## Testing
 
-- `single-agent.test.ts` — mocks `MultiServerMCPClient.getTools()` (same pattern #5 used for `yf.download`) and mocks the `backend` sandbox parameter against the `SandboxBackendProtocol` shape (`execute()`, `id`, `close()`) rather than real Docker. Verifies: the pipeline calls `evaluate()` with the agent's actual output shape, `AgentSignal`'s schema is enforced (a malformed agent response should fail loudly, not silently proceed to storage), all three `repository.save*()` calls happen with a consistent `as_of`, and the Langfuse span hierarchy nests correctly for a single-agent run.
-- **Explicitly not tested here, and not claimed to be:** whether `deepagents`' real execution loop actually calls a real Docker container correctly, whether the "1 retry" self-debug behavior triggers correctly on a real sandbox error, whether the agent's generated Python code is actually sound. All three need #7 to exist first.
+- `single-agent.test.ts` — mocks `MultiServerMCPClient.getTools()` (same pattern #5 used for `yf.download`) and constructs a real `SandboxManager` with an injected mock `dockerImpl` (its constructor already supports this), reusing the `makeMockDocker()` helper pattern from `harness/tests/sandbox/manager-concurrency.test.ts`. Verifies: `SandboxBackendAdapter.execute()` correctly routes to `runExplore()`, the pipeline calls `sandboxManager.runValidate()` with the agent's actual output shape, `AgentSignal`'s schema is enforced (a malformed agent response should fail loudly, not silently proceed to storage), the retry path re-invokes exactly once on `ValidationFailedError` and propagates immediately on `SandboxTimeoutError`/`SandboxError`, all three `repository.save*()` calls happen with a consistent `as_of`, and the Langfuse span hierarchy nests correctly for a single-agent run.
+- **Explicitly not tested here:** a real Docker daemon running the actual `forecasting-sandbox:latest` image end-to-end — that's an integration-level concern; whether the agent's generated Python code is actually sound (model-quality concern, not this story's).
 
-## Out of Scope (this design pass)
+## Prerequisite: real package dependencies not yet installed
 
-Any implementation touching `backend`/sandbox execution (blocked on #7) · the harness-to-`evaluate()` bridge (decision 7 — blocked on a cross-story architectural decision, not this story's alone) · the "1 retry, self-debug" middleware's exact trigger condition (needs #7's real error shape) · release tagging (`v0.1.0-alpha` — issue's own Release Gate subtask, happens after implementation, not design) · #11's multi-agent debate nesting (this story is one agent, `debate_round`/`agent_turn` spans are reused/collapsed for a single participant, not genuinely multi-round).
+`deepagents`, `@langchain/langgraph`, `@langchain/deepseek`, `langchain-mcp-adapters` were verified to exist and export the claimed APIs in a throwaway scratch install (`/tmp/.../scratchpad/deepagentscheck/`), **not in `harness/package.json`** — checked directly, none of the four appear there. This is a real gap: implementation's first task must be `pnpm add deepagents @langchain/langgraph @langchain/deepseek langchain-mcp-adapters` inside `harness/`, with a fresh `npx tsc --noEmit` pass confirming the versions that land match what this spec verified (`deepagents@1.12.3` or newer within the same major, since `SandboxBackendProtocolV1`'s deprecation in favor of V2 shows this package's sandbox API has already moved once).
+
+## Out of Scope
+
+Release tagging (`v0.1.0-alpha` — issue's own Release Gate subtask, happens after implementation) · #11's multi-agent debate nesting (this story is one agent, `debate_round`/`agent_turn` spans are reused/collapsed for a single participant, not genuinely multi-round) · whether #11's higher-volume debate protocol should reuse `runValidate()`'s per-call container cost or need something lighter-weight (Kanban follow-up, not blocking #9).
 
 ## Review Log
 
-Authored inline (Claude, this session — no subagent dispatch, no Codex delegation). Design-only pass; `reviewing-specs`' full verify→ponytail→grill loop to two consecutive `APPROVED` deferred until #7 exists and the sandbox interface can be verified against a real implementation rather than a documented type shape — reviewing a spec whose central integration point is unbuildable would produce approval on an assumption, not evidence. Flagging this explicitly rather than running the loop for form's sake.
+Authored inline (Claude, this session — no subagent dispatch, no Codex delegation), per CLAUDE.md's Token-efficiency mode. Original design-only pass explicitly deferred the full `reviewing-specs` loop until #7 existed, since the central integration point (sandbox interface) couldn't be verified against a real implementation.
 
-**Partial verification pass run anyway, on what's actually checkable now:** confirmed `deepagents@1.12.3`, `@langchain/langgraph@1.4.9`, `@langchain/deepseek@1.1.7` genuinely exist and export what's claimed (`createDeepAgent`, `ChatDeepSeek`); confirmed `repository.ts`'s `saveForecast`/`saveAgentSignal`/`saveEvalResult` exist with those exact names. **Caught one real defect in my own first draft**: the Data Flow section called `evaluate(signal, historicalFoldData)` as if it were an in-process call — checked `evaluate()`'s real signature and location (`src/forecasting_agent/evaluation/pipeline.py`, pure Python, "zero first-party imports outside evaluation package") and found there is **no bridge from the TypeScript harness to it at all** — not built by #6, not addressed by #9's issue text either. This is now decision 7, and it's a cross-story gap (also blocks #11), not something this spec resolves alone. Flagged on the Kanban.
+**#7 merged (`5a99b04`) — re-verified directly against the real code, not the Kanban's self-report:** read `harness/src/sandbox/manager.ts` and `types.ts` in full. Found decision 2's original hypothesis (`backend: sandbox` passed straight in) was **wrong** — `SandboxManager` has no `execute()`/`id`/`close()`, only `runExplore`/`runValidate`/`disposeRun`/`reconcile`/`shutdown` — and corrected it to require an adapter. Confirmed decision 7 (`runValidate()` as the evaluation bridge) was **correct** by reading `manager.ts:97-172` directly: real `--network none` container, real bind mounts, real `__EVAL_RESULT__` stdout parsing, real `EvalResultSchema` validation. Filled in decision 6's retry policy using the three real error classes (`SandboxTimeoutError`, `ValidationFailedError.detail`, `SandboxError.exitCode`) instead of the placeholder "needs #7's real error shape" from the original draft. Verified the `manager-concurrency.test.ts` mock pattern claim by grepping the actual file for `makeMockDocker`/`vi.fn` rather than assuming a `manager.test.ts` filename existed (it didn't — corrected to the real filename).
+
+Still pending before implementation: the full `reviewing-specs` verify→ponytail→grill loop to two consecutive `APPROVED`, run inline next (not dispatched), now that every decision is checkable against real merged code.
 
 Fences balanced, decision cross-references consistent, structure/data-flow/testing sections checked for internal consistency after all edits.
