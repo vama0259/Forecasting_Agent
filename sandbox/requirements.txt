@@ -1,0 +1,15 @@
+# sandbox/requirements.txt
+# Pinned to match pyproject.toml so M8's EvalRequest/evaluate() behave identically
+# inside the sandbox as outside it (spec section 6).
+numpy==2.5.2
+pydantic==2.13.0
+pandas==2.2.3
+scipy==1.14.1
+statsmodels==0.14.4
+scikit-learn==1.5.2
+prophet==1.1.6
+xgboost==2.1.3
+lightgbm==4.5.0
+pmdarima==2.0.4
+arch==7.2.0
+ta==0.11.0
