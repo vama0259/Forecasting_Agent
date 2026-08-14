@@ -1,8 +1,15 @@
 // harness/tests/sandbox/manager-validate.test.ts
 import { describe, it, expect, beforeAll } from 'vitest';
-import { writeFileSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+
+// Docker Desktop's VM-based daemon (WSL2 backend) cannot see host paths under
+// the native WSL filesystem (os.tmpdir() -> /tmp) as bind-mount sources -- they
+// resolve to an empty directory inside the container instead of the real file.
+// Paths under the repo (Windows-visible via /mnt/c) work correctly, so scratch
+// files for Docker-mounted tests must live there instead of os.tmpdir().
+const DOCKER_VISIBLE_TMP = join(process.cwd(), '.sandbox-test-tmp');
+mkdirSync(DOCKER_VISIBLE_TMP, { recursive: true });
 import Dockerode from 'dockerode';
 import { SandboxManager } from '../../src/sandbox/manager.js';
 import { ValidationFailedError } from '../../src/sandbox/types.js';
@@ -46,7 +53,7 @@ describe('SandboxManager.runValidate (requires Docker)', () => {
       return;
     }
     const mgr = new SandboxManager();
-    const dir = mkdtempSync(join(tmpdir(), 'sandbox-validate-'));
+    const dir = mkdtempSync(join(DOCKER_VISIBLE_TMP, 'sandbox-validate-'));
     const modelPath = join(dir, 'model.py');
     writeFileSync(modelPath, VALID_MODEL_SCRIPT);
 
@@ -67,7 +74,7 @@ describe('SandboxManager.runValidate (requires Docker)', () => {
       return;
     }
     const mgr = new SandboxManager();
-    const dir = mkdtempSync(join(tmpdir(), 'sandbox-validate-'));
+    const dir = mkdtempSync(join(DOCKER_VISIBLE_TMP, 'sandbox-validate-'));
     const modelPath = join(dir, 'model.py');
     writeFileSync(modelPath, UNAPPROVED_IMPORT_SCRIPT);
 

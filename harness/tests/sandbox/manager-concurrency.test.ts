@@ -22,6 +22,13 @@ function makeMockDocker(execDelayMs: number) {
     kill: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
     start: vi.fn(async () => {}),
+    modem: {
+      demuxStream: vi.fn(
+        (stream: { on: (ev: string, cb: (c: unknown) => void) => void }, out: { write: (c: unknown) => void }) => {
+          stream.on('data', (c) => out.write(c));
+        },
+      ),
+    },
   };
   const fakeDocker = {
     createContainer: vi.fn(async () => fakeContainer),

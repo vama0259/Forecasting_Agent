@@ -4,6 +4,8 @@
 
 import Dockerode from 'dockerode';
 import { Mutex, Semaphore } from 'async-mutex';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { RingBuffer } from './ring-buffer.js';
 import {
   ExecutionRequestSchema,
@@ -37,6 +39,15 @@ const DEFAULTS: ResolvedSandboxConfig = {
 interface WarmEntry {
   container: Dockerode.Container;
   lastActivityMs: number;
+}
+
+// Takes nothing; returns the monorepo root, derived from this file's own location
+// (harness/src/sandbox/manager.ts -> ../../..) rather than process.cwd(), since cwd
+// varies with the caller's invocation directory (e.g. vitest run from harness/) and
+// a wrong root silently causes Docker to auto-create empty directories on the host.
+function repoRootFromModule(): string {
+  const thisFile = fileURLToPath(import.meta.url);
+  return join(thisFile, '..', '..', '..', '..');
 }
 
 // Owns warm/cold container lifecycle and enforces ADR-021's concurrency/timeout/buffer limits.
@@ -92,12 +103,12 @@ export class SandboxManager {
       const stdout = new RingBuffer(this.config.stdioBufferBytes);
       const stderr = new RingBuffer(this.config.stdioBufferBytes);
       const start = Date.now();
-      const repoRoot = process.cwd();
+      const repoRoot = repoRootFromModule();
 
       const container = await this.docker.createContainer({
         Image: 'forecasting-sandbox:latest',
         Cmd: ['python', '/entrypoints/validate.py'],
-        Env: [`MODEL_SCRIPT_PATH=/workspace/model.py`],
+        Env: [`MODEL_SCRIPT_PATH=/workspace/model.py`, `PYTHONPATH=/workspace/m8`],
         Labels: { 'sandbox.managed': 'true', 'sandbox.run_id': req.runId, 'sandbox.tier': 'validate' },
         HostConfig: {
           NetworkMode: 'none',
@@ -106,7 +117,10 @@ export class SandboxManager {
           AutoRemove: true,
           Binds: [
             `${req.modelScriptPath}:/workspace/model.py:ro`,
-            `${repoRoot}/src/forecasting_agent/evaluation:/workspace/m8/evaluation:ro`,
+            // Mount the whole forecasting_agent package (not just evaluation/) --
+            // `import forecasting_agent.evaluation` needs the parent package's
+            // __init__.py to resolve; evaluation/ alone has no package root.
+            `${repoRoot}/src/forecasting_agent:/workspace/m8/forecasting_agent:ro`,
           ],
         },
       });
@@ -262,11 +276,17 @@ export class SandboxManager {
         AttachStderr: true,
       });
 
-      const runStream = (await runExec.start({ hijack: true, stdin: false })) as
-        { on: (ev: string, cb: (...args: unknown[]) => void) => void } | undefined;
-      if (runStream && typeof runStream.on === 'function') {
+      const runStream = await runExec.start({ hijack: true, stdin: false });
+      if (runStream) {
+        // Docker exec streams multiplex stdout/stderr into one stream with an 8-byte
+        // frame header per chunk unless Tty is set -- demux, don't read raw chunks,
+        // or the captured output contains binary frame headers mixed into the text.
         await new Promise<void>((resolve) => {
-          runStream.on('data', (chunk: unknown) => stdout.write(chunk as Buffer));
+          container.modem.demuxStream(
+            runStream,
+            { write: (c: Buffer) => stdout.write(c) },
+            { write: (c: Buffer) => stderr.write(c) },
+          );
           runStream.on('end', () => resolve());
         });
       }
