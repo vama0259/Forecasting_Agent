@@ -7,13 +7,25 @@ import { Mutex, Semaphore } from 'async-mutex';
 import { RingBuffer } from './ring-buffer.js';
 import {
   ExecutionRequestSchema,
+  EvalResultSchema,
   type ExecutionRequest,
   type ExecutionResult,
   type SandboxConfig,
   SandboxTimeoutError,
+  ValidationFailedError,
+  SandboxError,
 } from './types.js';
 
-const DEFAULTS: Required<SandboxConfig> = {
+type ResolvedSandboxConfig = {
+  concurrency: number;
+  timeoutMs: number;
+  stdioBufferBytes: number;
+  idleReaperMs: number;
+  memoryLimitBytes: number;
+  cpuLimit: number;
+};
+
+const DEFAULTS: ResolvedSandboxConfig = {
   concurrency: 2,
   timeoutMs: 45_000,
   stdioBufferBytes: 50 * 1024,
@@ -29,7 +41,7 @@ interface WarmEntry {
 
 // Owns warm/cold container lifecycle and enforces ADR-021's concurrency/timeout/buffer limits.
 export class SandboxManager {
-  private readonly config: Required<SandboxConfig>;
+  private readonly config: ResolvedSandboxConfig;
   private readonly docker: Dockerode;
   private readonly semaphore: Semaphore;
   private readonly runMutexes = new Map<string, Mutex>();
@@ -69,10 +81,113 @@ export class SandboxManager {
     });
   }
 
-  // Takes a validate ExecutionRequest; returns its ExecutionResult. Implemented in Task 6.
-  async runValidate(_reqInput: ExecutionRequest): Promise<ExecutionResult> {
-    void _reqInput;
-    throw new Error('not implemented');
+  // Takes a validate ExecutionRequest; returns its ExecutionResult from a fresh,
+  // --network none container running the fixed validate.py entrypoint.
+  async runValidate(reqInput: ExecutionRequest): Promise<ExecutionResult> {
+    const req = ExecutionRequestSchema.parse(reqInput);
+    if (!req.modelScriptPath) {
+      throw new SandboxError('runValidate requires modelScriptPath');
+    }
+    return this.semaphore.runExclusive(async () => {
+      const stdout = new RingBuffer(this.config.stdioBufferBytes);
+      const stderr = new RingBuffer(this.config.stdioBufferBytes);
+      const start = Date.now();
+      const repoRoot = process.cwd();
+
+      const container = await this.docker.createContainer({
+        Image: 'forecasting-sandbox:latest',
+        Cmd: ['python', '/entrypoints/validate.py'],
+        Env: [`MODEL_SCRIPT_PATH=/workspace/model.py`],
+        Labels: { 'sandbox.managed': 'true', 'sandbox.run_id': req.runId, 'sandbox.tier': 'validate' },
+        HostConfig: {
+          NetworkMode: 'none',
+          Memory: this.config.memoryLimitBytes,
+          NanoCpus: this.config.cpuLimit * 1e9,
+          AutoRemove: true,
+          Binds: [
+            `${req.modelScriptPath}:/workspace/model.py:ro`,
+            `${repoRoot}/src/forecasting_agent/evaluation:/workspace/m8/evaluation:ro`,
+          ],
+        },
+      });
+
+      const attachStream = await container.attach({ stream: true, stdout: true, stderr: true });
+      container.modem.demuxStream(
+        attachStream,
+        { write: (c: Buffer) => stdout.write(c) },
+        { write: (c: Buffer) => stderr.write(c) },
+      );
+
+      const runPromise = container.start().then(() => container.wait());
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new SandboxTimeoutError(`validate exceeded ${this.config.timeoutMs}ms`)),
+          this.config.timeoutMs,
+        );
+      });
+
+      let waitResult: { StatusCode: number };
+      try {
+        waitResult = await Promise.race([runPromise, timeoutPromise]);
+      } catch (err) {
+        if (err instanceof SandboxTimeoutError) {
+          await container.kill().catch(() => {});
+        }
+        throw err;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+
+      const stdoutStr = stdout.toString();
+      const resultLine = stdoutStr
+        .split('\n')
+        .reverse()
+        .find((line) => line.startsWith('__EVAL_RESULT__'));
+
+      if (waitResult.StatusCode !== 0) {
+        if (resultLine) {
+          const payload = JSON.parse(resultLine.slice('__EVAL_RESULT__'.length)) as {
+            error?: string;
+            detail?: string;
+          };
+          throw new ValidationFailedError(
+            `validate failed: ${payload.error ?? 'unknown'}`,
+            payload.detail ?? stdoutStr,
+          );
+        }
+        throw new SandboxError('validate container failed with no result payload', waitResult.StatusCode);
+      }
+
+      const evalResult = resultLine
+        ? EvalResultSchema.parse(JSON.parse(resultLine.slice('__EVAL_RESULT__'.length)))
+        : undefined;
+
+      return {
+        stdout: stdoutStr,
+        stderr: stderr.toString(),
+        stdoutTruncated: stdout.truncated,
+        stderrTruncated: stderr.truncated,
+        exitCode: waitResult.StatusCode,
+        durationMs: Date.now() - start,
+        evalResult,
+      };
+    });
+  }
+
+  // Takes nothing; returns void after force-removing any sandbox.managed containers
+  // not present in this fresh instance's warmContainers map (crash/restart orphan cleanup).
+  async reconcile(): Promise<void> {
+    const listed = await this.docker.listContainers({
+      all: true,
+      filters: JSON.stringify({ label: ['sandbox.managed=true'] }),
+    });
+    for (const info of listed) {
+      const runId = info.Labels?.['sandbox.run_id'];
+      if (runId && this.warmContainers.has(runId)) continue;
+      const container = this.docker.getContainer(info.Id);
+      await container.remove({ force: true }).catch(() => {});
+    }
   }
 
   // Takes a run_id; returns void after killing+removing that run's warm container, if any.

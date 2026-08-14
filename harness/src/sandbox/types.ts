@@ -29,7 +29,7 @@ export interface ExecutionResult {
   stderrTruncated: boolean;
   exitCode: number;
   durationMs: number;
-  evalResult?: EvalResult;
+  evalResult?: EvalResult | undefined;
 }
 
 export interface SandboxConfig {
