@@ -55,8 +55,8 @@ export class ValidationFailedError extends Error {
 
 // Thrown for generic Docker/infra failures (daemon unreachable, OOM kill, etc.).
 export class SandboxError extends Error {
-  readonly exitCode?: number;
-  constructor(message: string, exitCode?: number) {
+  readonly exitCode?: number | undefined;
+  constructor(message: string, exitCode?: number | undefined) {
     super(message);
     this.exitCode = exitCode;
   }
