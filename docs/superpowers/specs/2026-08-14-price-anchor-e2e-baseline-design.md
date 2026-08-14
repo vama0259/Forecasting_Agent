@@ -73,7 +73,13 @@ harness/tests/e2e/
 single-agent.ts orchestration, wrapped in one Langfuse trace (forecast_run):
   1. traceId = generateTraceId()                                    [span: forecast_run]
   2. trace = langfuse.trace({ name: 'forecast_run', id: traceId })
-  3. mcpClient = MultiServerMCPClient({ market_data: <cap('market_data') config> })
+  3. mcpClient = MultiServerMCPClient({ [config.capabilities.market_data]:
+       config.mcp_servers[config.capabilities.market_data] })
+     -- NOT cap('market_data'): that resolves a MarketDataProvider object (fetch_ohlcv() method,
+        for CapabilityRegistry health-checks/other non-agentic callers), not MCP connection
+        config. The real {command, args} config for the agent's tool client comes from
+        config.mcp_servers directly, keyed by whatever server name capabilities.market_data points
+        at (#4's config-loader.ts already validates that key exists in mcp_servers at startup).
      tools = await mcpClient.getTools()
   4. sandboxManager = new SandboxManager()
      adapter = new SandboxBackendAdapter(sandboxManager, runId)   [see decision 2]
@@ -115,6 +121,10 @@ single-agent.ts orchestration, wrapped in one Langfuse trace (forecast_run):
 - `single-agent.test.ts` — mocks `MultiServerMCPClient.getTools()` (same pattern #5 used for `yf.download`) and constructs a real `SandboxManager` with an injected mock `dockerImpl` (its constructor already supports this), reusing the `makeMockDocker()` helper pattern from `harness/tests/sandbox/manager-concurrency.test.ts`. Verifies: `SandboxBackendAdapter.execute()` correctly routes to `runExplore()`, the pipeline calls `sandboxManager.runValidate()` with the agent's actual output shape, `AgentSignal`'s schema is enforced (a malformed agent response should fail loudly, not silently proceed to storage), the retry path re-invokes exactly once on `ValidationFailedError` and propagates immediately on `SandboxTimeoutError`/`SandboxError`, all three `repository.save*()` calls happen with a consistent `as_of`, and the Langfuse span hierarchy nests correctly for a single-agent run.
 - **Explicitly not tested here:** a real Docker daemon running the actual `forecasting-sandbox:latest` image end-to-end — that's an integration-level concern; whether the agent's generated Python code is actually sound (model-quality concern, not this story's).
 
+## Open item: `MultiServerMCPClient`'s constructor shape is not re-verified in this session
+
+Decision 5's claim that `MultiServerMCPClient({ serverName: { command, args } })` accepts the same shape as `config.mcp_servers` traces back to #5's spec work, not something checked against a real install in this session — `langchain-mcp-adapters` was never added to the scratch verification dir alongside `deepagents`/`langgraph`/`deepseek`. Not asserted as fact; implementation's dependency-install task (below) must add this package and confirm the constructor shape with a real `npx tsc --noEmit` before Task 3 (agent config) is written, not assume it compiles.
+
 ## Prerequisite: real package dependencies not yet installed
 
 `deepagents`, `@langchain/langgraph`, `@langchain/deepseek`, `langchain-mcp-adapters` were verified to exist and export the claimed APIs in a throwaway scratch install (`/tmp/.../scratchpad/deepagentscheck/`), **not in `harness/package.json`** — checked directly, none of the four appear there. This is a real gap: implementation's first task must be `pnpm add deepagents @langchain/langgraph @langchain/deepseek langchain-mcp-adapters` inside `harness/`, with a fresh `npx tsc --noEmit` pass confirming the versions that land match what this spec verified (`deepagents@1.12.3` or newer within the same major, since `SandboxBackendProtocolV1`'s deprecation in favor of V2 shows this package's sandbox API has already moved once).
@@ -135,6 +145,10 @@ Authored inline (Claude, this session — no subagent dispatch, no Codex delegat
 - **Round 2 — re-verifying round 1's own fixes, not just the original draft:** confirmed `createDeepAgent`'s `backend?: AnyBackendProtocol | factory` param (`AnyBackendProtocol = BackendProtocolV1 | BackendProtocolV2`) genuinely accepts a `SandboxBackendAdapter extends BaseSandbox` instance — read the type union directly rather than assuming compatibility. No Blockers, no Highs, no open decisions. **Verdict: APPROVED.**
 - **Round 3 — confirming round 2 introduced no new unverified spec content** (round 2 added verification evidence only, no spec edits): ponytail — `uploadFiles`/`downloadFiles` no-op stubs are the minimum forced by extending `BaseSandbox`, not overbuilt. Grill — no Blockers, no Highs, no open decisions. **Verdict: APPROVED.**
 
-Two consecutive `APPROVED` (rounds 2 and 3) reached. Spec cleared for `writing-plans`.
+Two consecutive `APPROVED` (rounds 2 and 3) reached.
+
+**Round 4 (post-approval, before plan-writing):** re-reading Data Flow step 3 against the real `CapabilityMap`/`config.ts` types caught a real defect — `cap('market_data')` returns a `MarketDataProvider` (`fetch_ohlcv()` method), not MCP connection config; the real config lives at `config.mcp_servers[config.capabilities.market_data]`. Fixed. Also downgraded decision 5's `MultiServerMCPClient` constructor-shape claim to an explicit open item — it was never re-verified against a real install in this session, only inherited from #5's spec work. No other issues found. **Verdict: APPROVED.**
+
+Spec cleared for `writing-plans`.
 
 Fences balanced, decision cross-references consistent, structure/data-flow/testing sections checked for internal consistency after all edits.
