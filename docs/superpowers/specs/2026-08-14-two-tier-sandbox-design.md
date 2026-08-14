@@ -22,7 +22,7 @@ Runtime enforcement of ADR-012's integrity boundary: a model that only works bec
 
 ```
 harness/src/sandbox/
-  types.ts          -- SandboxTier, ExecutionRequest, ExecutionResult, SandboxConfig, SandboxError
+  types.ts          -- SandboxTier, ExecutionRequest, ExecutionResult, SandboxConfig, SandboxError, EvalResultSchema (Zod, mirrors M8's EvalResult)
   ring-buffer.ts     -- RingBuffer: fixed-capacity byte buffer, overwrites oldest on overflow
   manager.ts         -- SandboxManager: runExplore(), runValidate(), dispose()
 sandbox/
@@ -39,9 +39,11 @@ sandbox/
 ### Explore (warm, stateful)
 ```
 runExplore({ runId, code, workspacePath })
-  -> acquire Semaphore(2) permit
+  -> acquire per-runId Mutex
   -> container = warmContainers.get(runId) ?? createWarmContainer(runId)
-  -> docker exec <container> python -c <code>   (via dockerode exec API)
+  -> acquire Semaphore(2) permit
+  -> exec "sh -c 'cat > /tmp/script.py'", write <code> to its stdin stream, close stdin
+  -> docker exec <container> python /tmp/script.py   (via dockerode exec API)
   -> stream stdout/stderr into two RingBuffer(50KB) instances
   -> race(execPromise, timeout(45s))
        on timeout: docker kill + remove container, warmContainers.delete(runId), throw SandboxTimeoutError
@@ -49,9 +51,10 @@ runExplore({ runId, code, workspacePath })
 ```
 - One warm container per `run_id` (`Map<string, ContainerHandle>`), created with a long-running idle process (`tail -f /dev/null`) as CMD so `exec` has a live target between iterations.
 - Semaphore permit is held **only for the duration of the exec call**, not the container's lifetime — many warm containers can sit idle simultaneously; the cap limits concurrent *executions*, not concurrent *containers*, matching ADR-021's daemon-contention rationale.
-- **Per-run_id serialization:** `SandboxManager` holds a `Map<string, Mutex>` (one `async-mutex` `Mutex` per active `run_id`) so a second `runExplore()` call for the same `run_id` queues behind the first instead of `exec`-ing concurrently into the shared warm container. This is separate from the global Semaphore(2) — the mutex prevents state corruption within one run's container; the semaphore caps total daemon load across all runs. A call acquires its per-run mutex first, then the global semaphore, then execs.
+- **Per-run_id serialization:** `SandboxManager` holds a `Map<string, Mutex>` (one `async-mutex` `Mutex` per active `run_id`) so a second `runExplore()` call for the same `run_id` queues behind the first instead of `exec`-ing concurrently into the shared warm container. This is separate from the global Semaphore(2) — the mutex prevents state corruption within one run's container; the semaphore caps total daemon load across all runs. A call acquires its per-run mutex **first** (before even resolving/creating the container handle), then the global semaphore, then execs — this ordering is what makes the container handle safe to resolve, since the reaper (below) also holds this mutex before killing.
 - Network: default bridge (PyPI reachable). `ExecutionRequest` for explore takes a caller-supplied `workspacePath` (host directory), bind-mounted read-write at `/workspace` inside the container. `SandboxManager` only provides the mount point — it does not implement ADR-021's `workspace/skills/`, `workspace/models/` (persist) vs `workspace/scratch/` (wipe) policy; that split remains the caller's (M7's) responsibility, same as before, but the mount now exists so that policy isn't blocked on reopening this issue later.
-- Caller (M7, not yet built) is responsible for calling `disposeRun(runId)` when a debate round ends; `SandboxManager` also runs an idle reaper (configurable, default 10 min) that kills+removes warm containers with no exec activity, so a crashed caller can't leak containers forever.
+- Caller (M7, not yet built) is responsible for calling `disposeRun(runId)` when a debate round ends; `SandboxManager` also runs an idle reaper (configurable, default 10 min) that kills+removes warm containers with no exec activity. **The reaper acquires the same per-`run_id` `Mutex` used by `runExplore()` before killing that run's container** — this closes the race where a queued `runExplore()` call resolves a container handle that the reaper is mid-removal on; the reaper only acts on a run once it can prove no call is mid-exec or mid-queue for it.
+- **Process-restart reconciliation:** every warm container is created with label `sandbox.run_id=<runId>` and `sandbox.managed=true`. On `SandboxManager` startup, it lists containers with `sandbox.managed=true` and force-removes any not present in its own (freshly empty) `warmContainers` map — closes the orphan leak if the harness process crashes or restarts while warm containers are alive.
 
 ### Validate (cold, clean)
 ```
@@ -95,7 +98,7 @@ interface ExecutionResult {
   stderrTruncated: boolean;
   exitCode: number;
   durationMs: number;
-  evalResult?: unknown;       // validate only, extracted from the __EVAL_RESULT__-delimited stdout line
+  evalResult?: EvalResultSchema;  // validate only, extracted from the __EVAL_RESULT__-delimited stdout line and parsed against a Zod schema mirroring M8's EvalResult (verdict, layers, layer_means) — not `unknown`, since the shape is already known from Pydantic
 }
 
 interface SandboxConfig {
@@ -147,6 +150,9 @@ Zod schemas mirror these for runtime validation at the `SandboxManager` public b
   - Semaphore blocks a 3rd concurrent `runExplore`/`runValidate` call until one of the first two releases.
   - Timeout branch fires at 45s and calls `kill`+`remove` on the mocked container.
   - `RingBuffer` truncates correctly at exactly 50KB and sets the truncated flag; verify oldest-bytes-dropped semantics.
+  - **Two concurrent `runExplore()` calls for the same `run_id` execute sequentially, not concurrently** — assert the second call's exec doesn't start until the first's mutex-guarded section completes, using a mocked exec that resolves on a controlled delay.
+  - Idle reaper does not kill a container whose per-`run_id` mutex is currently held by a queued/in-flight call — assert the reaper's kill is deferred behind an in-flight mutex holder.
+  - Startup reconciliation: given a mocked `docker ps` listing containers labeled `sandbox.managed=true` not present in a fresh `warmContainers` map, `SandboxManager` force-removes them.
 - **Integration (requires Docker — now available via the Windows Docker Desktop / WSL2 bridge set up this session):**
   - Explore tier executes a real pandas script against the built image and returns stdout.
   - Validate tier: a script importing an unapproved package fails with `ValidationFailedError` inside `--network none`.
