@@ -27,6 +27,9 @@ jobs:
           uv run ruff check . --output-format=github
           uv run ruff format --check .
 
+      - name: Type-check with mypy
+        run: uv run mypy src/ tests/evaluation/
+
       - name: Security scan with Bandit
         run: |
           uv run bandit -r src/ -c pyproject.toml -f json -o bandit-report.json || true

@@ -73,18 +73,30 @@ import pytest
 from pydantic import ValidationError
 from forecasting_agent.data_server.contracts import OHLCVBar, OHLCVResponse, SymbolMeta, MarketMeta
 
+
 def test_ohlcv_bar_accepts_valid_shape():
-    bar = OHLCVBar(date=date(2024, 1, 1), open=100.0, high=105.0, low=99.0, close=103.0,
-                    volume=1000, is_outlier=False, is_circuit_locked=False)
+    bar = OHLCVBar(
+        date=date(2024, 1, 1),
+        open=100.0,
+        high=105.0,
+        low=99.0,
+        close=103.0,
+        volume=1000,
+        is_outlier=False,
+        is_circuit_locked=False,
+    )
     assert bar.close == 103.0
+
 
 def test_ohlcv_bar_rejects_negative_volume():
     with pytest.raises(ValidationError):
         OHLCVBar(date=date(2024, 1, 1), open=100.0, high=105.0, low=99.0, close=103.0, volume=-1)
 
+
 def test_ohlcv_response_nests_bars():
     resp = OHLCVResponse(symbol="RELIANCE.NS", market="NSE", bars=[], data_stale=False)
     assert resp.bars == []
+
 
 def test_symbol_meta_requires_market():
     with pytest.raises(ValidationError):
@@ -148,17 +160,21 @@ import pytest
 from forecasting_agent.data_server.contracts import OHLCVBar
 from forecasting_agent.data_server.point_in_time import filter_as_of, LeakageError
 
+
 def _bar(d):
     return OHLCVBar(date=d, open=1, high=1, low=1, close=1, volume=1)
+
 
 def test_future_as_of_raises_leakage_error():
     with pytest.raises(LeakageError):
         filter_as_of([_bar(date.today())], as_of=date.today() + timedelta(days=1))
 
+
 def test_past_as_of_excludes_later_bars():
     bars = [_bar(date(2024, 1, 1)), _bar(date(2024, 1, 5)), _bar(date(2024, 1, 10))]
     result = filter_as_of(bars, as_of=date(2024, 1, 5))
     assert [b.date for b in result] == [date(2024, 1, 1), date(2024, 1, 5)]
+
 
 def test_no_as_of_returns_everything():
     bars = [_bar(date(2024, 1, 1)), _bar(date(2024, 1, 5))]
@@ -210,10 +226,14 @@ from datetime import date, timedelta
 from forecasting_agent.data_server.contracts import OHLCVBar
 from forecasting_agent.data_server.cleaner import hampel_clip
 
+
 def _series(closes):
     base = date(2024, 1, 1)
-    return [OHLCVBar(date=base + timedelta(days=i), open=c, high=c, low=c, close=c, volume=100)
-            for i, c in enumerate(closes)]
+    return [
+        OHLCVBar(date=base + timedelta(days=i), open=c, high=c, low=c, close=c, volume=100)
+        for i, c in enumerate(closes)
+    ]
+
 
 def test_clips_not_drops_an_injected_outlier():
     closes = [100.0] * 25 + [500.0] + [100.0] * 5  # spike at index 25
@@ -223,6 +243,7 @@ def test_clips_not_drops_an_injected_outlier():
     assert result[25].is_outlier is True
     assert result[25].close < 500.0  # clipped, not left at the spike value
     assert result[0].close == 100.0  # untouched normal bars stay untouched
+
 
 def test_no_outliers_leaves_series_unchanged():
     bars = _series([100.0] * 30)
@@ -288,17 +309,26 @@ from datetime import date
 import pandas as pd
 from forecasting_agent.data_server.plugins.nse import NsePlugin
 
+
 def test_supports_ns_and_bo_suffixes():
     plugin = NsePlugin()
     assert plugin.supports("RELIANCE.NS")
     assert plugin.supports("RELIANCE.BO")
     assert not plugin.supports("AAPL")
 
+
 @patch("forecasting_agent.data_server.plugins.nse.yf.download")
 def test_fetch_maps_yfinance_response_to_ohlcv_bar(mock_download):
-    mock_download.return_value = pd.DataFrame({
-        "Open": [100.0], "High": [105.0], "Low": [99.0], "Close": [103.0], "Volume": [1000],
-    }, index=pd.to_datetime([date(2024, 1, 1)]))
+    mock_download.return_value = pd.DataFrame(
+        {
+            "Open": [100.0],
+            "High": [105.0],
+            "Low": [99.0],
+            "Close": [103.0],
+            "Volume": [1000],
+        },
+        index=pd.to_datetime([date(2024, 1, 1)]),
+    )
     plugin = NsePlugin()
     bars = plugin.fetch("RELIANCE.NS", date(2024, 1, 1), date(2024, 1, 1))
     assert len(bars) == 1
@@ -410,21 +440,36 @@ from datetime import date
 import pandas as pd
 from forecasting_agent.data_server.server import fetch_ohlcv
 
+
 @patch("forecasting_agent.data_server.plugins.nse.yf.download")
 def test_full_pipeline_returns_validated_response(mock_download):
-    mock_download.return_value = pd.DataFrame({
-        "Open": [100.0], "High": [105.0], "Low": [99.0], "Close": [103.0], "Volume": [1000],
-    }, index=pd.to_datetime([date(2024, 1, 1)]))
+    mock_download.return_value = pd.DataFrame(
+        {
+            "Open": [100.0],
+            "High": [105.0],
+            "Low": [99.0],
+            "Close": [103.0],
+            "Volume": [1000],
+        },
+        index=pd.to_datetime([date(2024, 1, 1)]),
+    )
     result = fetch_ohlcv("RELIANCE.NS", "NSE", "2024-01-01", "2024-01-01", as_of=None)
     assert result.symbol == "RELIANCE.NS"
     assert len(result.bars) == 1
 
+
 def test_future_as_of_raises_leakage_error_through_the_full_tool():
     from forecasting_agent.data_server.point_in_time import LeakageError
     import pytest
+
     with pytest.raises(LeakageError):
-        fetch_ohlcv("RELIANCE.NS", "NSE", "2024-01-01", "2024-01-01",
-                    as_of=str(date.today().replace(year=date.today().year + 1)))
+        fetch_ohlcv(
+            "RELIANCE.NS",
+            "NSE",
+            "2024-01-01",
+            "2024-01-01",
+            as_of=str(date.today().replace(year=date.today().year + 1)),
+        )
 ```
 
 Run, confirm red: `server` doesn't exist.
