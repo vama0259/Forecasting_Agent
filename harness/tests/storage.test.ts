@@ -34,3 +34,37 @@ describe('migrator', () => {
     await pool.end();
   });
 });
+
+describe('repository — as_of guard', () => {
+  it('queryMemory excludes a future-stamped row from a past-dated query', async () => {
+    const { saveForecast, queryMemory } = await import('../src/storage/repository.js');
+    const pool = new Pool({ connectionString: TEST_DB_URL });
+    await saveForecast(pool, {
+      symbol: 'RELIANCE',
+      horizon: '1d',
+      prediction: {},
+      confidence: 0.8,
+      asOf: new Date('2024-06-01'),
+    });
+    await saveForecast(pool, {
+      symbol: 'RELIANCE',
+      horizon: '1d',
+      prediction: {},
+      confidence: 0.8,
+      asOf: new Date('2024-01-01'),
+    });
+    const results = await queryMemory(pool, new Date('2024-03-01'));
+    expect(results.every((r) => r.asOf && r.asOf <= new Date('2024-03-01'))).toBe(true);
+    expect(results.some((r) => r.asOf && r.asOf.getTime() === new Date('2024-01-01').getTime())).toBe(true);
+    await pool.end();
+  });
+
+  it('there is no alternate read method that skips the as_of guard', async () => {
+    const repo = await import('../src/storage/repository.js');
+    const exportedNames = Object.keys(repo);
+    const readMethods = exportedNames.filter(
+      (n) => n.toLowerCase().includes('query') || n.toLowerCase().includes('get'),
+    );
+    expect(readMethods).toEqual(['queryMemory']);
+  });
+});
