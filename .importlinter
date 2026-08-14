@@ -1,0 +1,15 @@
+[importlinter]
+root_package = forecasting_agent
+
+[importlinter:contract:plugins-isolation]
+name = Market plugins isolation
+type = forbidden
+source_modules =
+    forecasting_agent.data_server.plugins
+forbidden_modules =
+    forecasting_agent.data_server.registry
+    forecasting_agent.data_server.server
+    forecasting_agent.data_server.cleaner
+    forecasting_agent.data_server.normalizer
+    forecasting_agent.data_server.point_in_time
+    forecasting_agent.data_server.cache
