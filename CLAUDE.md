@@ -32,8 +32,11 @@ ALL installed skills and tools MUST be actively used when relevant. Don't limit 
 - `/clean-code-principles` + `/solid-principles` — consult on EVERY class/module design
 - `/ponytail-review` — run on EVERY PR/diff before merging
 - `reviewing-specs` — run on EVERY spec/ADR/plan before implementation; loops verify → ponytail → grill until the SDE III reviewer returns `APPROVED` twice
+- `spec-reviewer` (agent, HARD RULE) — after writing or materially editing ANY spec/ADR/plan, dispatch this agent BEFORE implementation, before committing it, and before `writing-plans`. Never self-approve a spec you authored. It exits only on two consecutive `APPROVED` verdicts; anything else means another round.
 - `/lean-ctx` — leverage context-efficient reads, compressed shell execution, and CCP session memory
 - `gemini-delegated-implementation` (model-invoked) — WHEN implementation splits into independent, well-specified chunks: delegate to Gemini 3.7 Flash (High) via `agy`, fan out in parallel worktrees, then verify every result before accepting — never skip the verification pass
+- `gemini-plan-implementation` (model-invoked) — WHEN a plan's tasks are independent enough to delegate: full spec→merge pipeline (`reviewing-specs` → `writing-plans` → per chunk: `codebase-design` seam check → `test-driven-development` tests-first → Gemini implements → Haiku validates, escalating to Sonnet on failure → `systematic-debugging` before any corrective round) → `dispatching-parallel-agents` fan-out → `finishing-a-development-branch`
+- `gemini-plan-writer` (agent, HARD RULE) — EVERY time an implementation plan is written, dispatch this agent instead of writing the plan inline via `writing-plans` directly. No exceptions, no "just this once inline plan." Requires the spec already cleared `spec-reviewer`; if it hasn't, run that first — do not write the plan around it. Produces each task pre-loaded with a seam note, a real failing test (run, watched red), a ready-to-paste Gemini delegation prompt, and a validator brief, so the execution loop needs no re-derivation.
 
 ## Design Principles (HARD RULE)
 Every design decision MUST be reasoned out. No implicit choices.
@@ -110,6 +113,8 @@ Before implementing any module, class, or architectural choice, document:
 - `/lean-ctx` — context-efficient coding patterns
 - `/graphify` — build knowledge graph from codebase, query it, trace paths
 - `gemini-delegated-implementation` — delegate parallelizable implementation to Gemini 3.7 Flash (High) via `agy`, then verify (model-invoked)
+- `gemini-plan-implementation` — full plan pipeline: Gemini implements, Haiku→Sonnet escalating subagents validate, parallel dispatch per chunk (model-invoked)
+- `gemini-plan-writer` — agent that writes plans pre-structured for `gemini-plan-implementation` (seam note + failing test + Gemini prompt + validator brief per task)
 
 ### Platform Skills (always available, no install needed)
 
