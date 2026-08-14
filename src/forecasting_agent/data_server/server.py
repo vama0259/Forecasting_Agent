@@ -8,7 +8,7 @@ import yfinance as yf  # type: ignore[import-untyped]
 from mcp.server.fastmcp import FastMCP
 
 from forecasting_agent.data_server.cache import ParquetCache
-from forecasting_agent.data_server.cleaner import hampel_clip
+from forecasting_agent.data_server.cleaner import flag_circuit_locked, hampel_clip
 from forecasting_agent.data_server.contracts import (
     FnOChainResponse,
     MarketMeta,
@@ -129,6 +129,7 @@ def fetch_ohlcv(
 
     # 3. Outlier cleaning
     cleaned_bars = hampel_clip(raw_bars)
+    cleaned_bars = flag_circuit_locked(cleaned_bars)
 
     # 4. Calendar alignment
     normalized_bars = align_calendar(cleaned_bars)

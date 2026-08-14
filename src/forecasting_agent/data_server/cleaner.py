@@ -62,4 +62,21 @@ def hampel_clip(
     return cleaned_bars
 
 
-__all__ = ["hampel_clip"]
+def flag_circuit_locked(bars: list[OHLCVBar]) -> list[OHLCVBar]:
+    """Flag circuit-freeze days per ADR-025: zero-volume trading days.
+
+    ADR-025 defines a circuit freeze as 0% volume or an exact upper/lower band touch.
+    Only the zero-volume trigger is implemented here — band-touch detection needs the
+    previous day's close and each symbol's circuit percentage limit, neither of which
+    OHLCVBar currently models. Tracked as a known gap, not fabricated with a proxy.
+
+    Args:
+        bars: Sequence of OHLCVBar instances.
+
+    Returns:
+        A new list of OHLCVBar instances with is_circuit_locked set on zero-volume bars.
+    """
+    return [bar.model_copy(update={"is_circuit_locked": bar.volume == 0}) for bar in bars]
+
+
+__all__ = ["flag_circuit_locked", "hampel_clip"]
