@@ -26,12 +26,14 @@ Full plugin reference: see `docs/obsidian-bridge.md`. WHEN → DO triggers Claud
 ## Skill Usage (HARD RULE)
 ALL installed skills and tools MUST be actively used when relevant. Don't limit to a subset — use the full arsenal wisely. Key enforcement:
 - `/ponytail` — run on EVERY implementation to force simplest solution
-- `/grill-me` — stress-test EVERY design decision before committing
+- `grilling` (model-invoked) — stress-test EVERY design decision before committing; `/grill-me` is the same interview but user-invoked only, run it yourself for a manual session
 - `/using-superpowers` — leverage advanced tool capabilities for complex tasks
 - `/verification-before-completion` — verify EVERY piece of work before marking done
 - `/clean-code-principles` + `/solid-principles` — consult on EVERY class/module design
 - `/ponytail-review` — run on EVERY PR/diff before merging
+- `reviewing-specs` — run on EVERY spec/ADR/plan before implementation; loops verify → ponytail → grill until the SDE III reviewer returns `APPROVED` twice
 - `/lean-ctx` — leverage context-efficient reads, compressed shell execution, and CCP session memory
+- `gemini-delegated-implementation` (model-invoked) — WHEN implementation splits into independent, well-specified chunks: delegate to Gemini 3.7 Flash (High) via `agy`, fan out in parallel worktrees, then verify every result before accepting — never skip the verification pass
 
 ## Design Principles (HARD RULE)
 Every design decision MUST be reasoned out. No implicit choices.
@@ -80,6 +82,8 @@ Before implementing any module, class, or architectural choice, document:
 - `/ponytail-debt` — harvest all `ponytail:` comments into a debt ledger
 
 #### Design & Architecture
+- `reviewing-specs` — adversarial spec review loop (verify → ponytail → grill) until SDE III sign-off
+- `codebase-design` — deep-module vocabulary: small interfaces, seam placement, testability (TS-oriented)
 - `/clean-code-principles` — SOLID, DRY, KISS, design patterns, clean code fundamentals
 - `/solid-principles` — SOLID implementation guidance for modules/functions/components
 - `/clean-architecture` — dependency rule, ports/adapters, hexagonal, onion architecture
@@ -101,9 +105,11 @@ Before implementing any module, class, or architectural choice, document:
 - `/docker-build-deploy` — containerization, multi-stage builds, GitHub Actions deploy
 
 #### Other Project Skills
-- `/grill-me` — stress-test ideas, code, or implementations
+- `grilling` — stress-test ideas, code, or implementations (model-invoked interview primitive)
+- `/grill-me` — same interview, user-invoked only (type it yourself; Claude cannot trigger it)
 - `/lean-ctx` — context-efficient coding patterns
 - `/graphify` — build knowledge graph from codebase, query it, trace paths
+- `gemini-delegated-implementation` — delegate parallelizable implementation to Gemini 3.7 Flash (High) via `agy`, then verify (model-invoked)
 
 ### Platform Skills (always available, no install needed)
 
@@ -273,6 +279,15 @@ Before implementing any module, class, or architectural choice, document:
 - Dependencies / imports / exports? → `ctx_read mode=map`
 - Editing by reference? → `ctx_read mode=anchored` then `ctx_patch`
 - Unmodified raw bytes needed? → `ctx_read raw=true` or `lean-ctx raw "<command>"`
+
+#### agy — Antigravity CLI Bridge (Gemini delegation)
+
+Self-hosted MCP server (`~/mcp-servers/agy-mcp`, registered user-scope) wrapping Google's Antigravity CLI (`agy`) so Claude can delegate implementation work to Gemini. See `gemini-delegated-implementation` skill for full usage rules — model, effort, instruction quality, parallel dispatch, and the mandatory verification pass.
+
+- `run_agy` — run a single non-interactive prompt (`agy --print`); accepts `model`, `agent`, `effort`, `mode`, `project`, `conversation`, `continue_session`, `add_dirs`, `dangerously_skip_permissions`, `timeout_seconds`
+- `list_agy_agents` / `list_agy_models` — **unreliable in this sandbox, hang indefinitely** — don't rely on these for live discovery
+- **`--model` fails silently on any non-exact match** (verified) — no error, just keeps whatever model the session already defaulted to. Local default is already Gemini 3.7 Flash (High); omit `model` entirely, or use the exact string `"Gemini 3.7 Flash (High)"` (not `--effort`, which hard-errors on Gemini models). Full details in `gemini-delegated-implementation` skill.
+- Default delegation call: `run_agy(prompt=..., add_dirs=[...], mode="accept-edits")` — no `model`/`effort` needed to get Gemini 3.7 Flash (High) in this environment
 
 #### langchain-docs — LangChain Documentation
 - `search_docs_by_lang_chain` — search LangChain docs
