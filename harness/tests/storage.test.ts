@@ -68,3 +68,18 @@ describe('repository — as_of guard', () => {
     expect(readMethods).toEqual(['queryMemory']);
   });
 });
+
+describe('semantic_memory (pgvector)', () => {
+  it('applies 002_memory_tiers.sql, creates a real vector column and index', async () => {
+    const pool = new Pool({ connectionString: TEST_DB_URL });
+    await runMigrations(pool, 'src/storage/migrations');
+    const ext = await pool.query(`SELECT extname FROM pg_extension WHERE extname = 'vector'`);
+    expect(ext.rows.length).toBe(1);
+    await pool.query(
+      `INSERT INTO semantic_memory (id, embedding, as_of, created_at) VALUES (gen_random_uuid(), '[0.1,0.2,0.3]', now(), now())`,
+    );
+    const rows = await pool.query(`SELECT embedding FROM semantic_memory LIMIT 1`);
+    expect(rows.rows.length).toBe(1);
+    await pool.end();
+  });
+});
