@@ -34,7 +34,7 @@ Every session MUST update the Obsidian vault at `C:\Users\vama0\Knowledge` befor
 - **Clean Architecture**: Inward dependency rule, framework-independent business rules.
 - **Composition over Inheritance**: Compose behaviors rather than deep inheritance trees.
 - **/ponytail Mindset**: Implement the simplest working solution (YAGNI).
-- **/grill-me**: Stress-test non-trivial architectural decisions.
+- **grilling** (model-invoked): Stress-test non-trivial architectural decisions. `/grill-me` is the same interview but user-invoked only.
 - **/verification-before-completion**: Test and verify before marking tasks complete.
 
 ## MCP Servers Integration

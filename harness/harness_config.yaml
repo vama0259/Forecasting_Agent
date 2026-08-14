@@ -1,0 +1,21 @@
+llm:
+  provider: anthropic
+  model: claude-sonnet-4
+  api_key: ${LLM_API_KEY}
+
+mcp_servers:
+  market:
+    command: node
+    args: ["./servers/market-data/index.js"]
+  web:
+    command: node
+    args: ["./servers/web-search/index.js"]
+
+capabilities:
+  chat: llm
+  search: web
+  sentiment: llm
+  market_data: market
+
+sandbox: {}
+eval: {}
