@@ -20,6 +20,14 @@ export const HarnessConfigSchema = z.object({
   }),
   mcp_servers: z.record(z.string(), McpServerSchema).default({}),
   capabilities: CapabilitiesSchema,
+  storage: z.object({
+    connection_string: z.string().min(1),
+  }),
+  tracing: z.object({
+    langfuse_public_key: z.string().min(1),
+    langfuse_secret_key: z.string().min(1),
+    langfuse_base_url: z.string().min(1),
+  }),
   sandbox: z.record(z.string(), z.unknown()).default({}),
   eval: z.record(z.string(), z.unknown()).default({}),
 });
