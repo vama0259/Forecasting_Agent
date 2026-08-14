@@ -3,6 +3,8 @@
 setup:
 	uv python install 3.12
 	uv sync
+	corepack enable pnpm
+	cd harness && pnpm install
 
 sync:
 	uv sync
@@ -11,13 +13,17 @@ sync:
 lint:
 	uv run ruff check .
 	uv run mypy src/
+	cd harness && pnpm lint
+	cd harness && pnpm typecheck
 
 format:
 	uv run ruff check --fix .
 	uv run ruff format .
+	cd harness && pnpm format
 
 test:
 	uv run pytest tests/ -v
+	cd harness && pnpm test
 
 security:
 	uv run bandit -r src/ -c pyproject.toml
