@@ -87,5 +87,12 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Build sandbox image
+        # ubuntu-latest ships Docker pre-installed, so the Docker-gated sandbox
+        # tests (manager-validate.test.ts) run here rather than skipping -- but
+        # only if the image they target actually exists first.
+        working-directory: .
+        run: docker build -f sandbox/Dockerfile -t forecasting-sandbox:latest sandbox/
+
       - name: Test
         run: pnpm test

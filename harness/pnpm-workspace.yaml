@@ -1,0 +1,8 @@
+allowBuilds:
+  # Transitive deps of dockerode's docker-modem (ssh2 for remote-Docker-over-SSH,
+  # cpu-features as its native accel companion) and dockerode's gRPC support
+  # (protobufjs). Unused by SandboxManager (local socket only, no SSH/gRPC), but
+  # dockerode requires them to install; all three are well-established packages.
+  cpu-features: true
+  protobufjs: true
+  ssh2: true

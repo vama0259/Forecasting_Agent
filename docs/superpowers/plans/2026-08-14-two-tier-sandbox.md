@@ -883,7 +883,7 @@ def test_valid_model_produces_eval_result(tmp_path):
     result = run_entrypoint(VALID_MODEL_SCRIPT, tmp_path)
     assert result.returncode == 0, result.stderr
     line = [ln for ln in result.stdout.splitlines() if ln.startswith("__EVAL_RESULT__")][-1]
-    payload = json.loads(line[len("__EVAL_RESULT__"):])
+    payload = json.loads(line[len("__EVAL_RESULT__") :])
     assert "verdict" in payload
     assert "layers" in payload
 
@@ -892,7 +892,7 @@ def test_crashing_model_exits_nonzero_with_error_payload(tmp_path):
     result = run_entrypoint(CRASHING_MODEL_SCRIPT, tmp_path)
     assert result.returncode != 0
     line = [ln for ln in result.stdout.splitlines() if ln.startswith("__EVAL_RESULT__")][-1]
-    payload = json.loads(line[len("__EVAL_RESULT__"):])
+    payload = json.loads(line[len("__EVAL_RESULT__") :])
     assert "error" in payload
     assert "boom" in payload["detail"]
 ```
