@@ -54,10 +54,69 @@ describe('SandboxBackendAdapter', () => {
     expect(result).toEqual({ output: 'outerr', exitCode: 1, truncated: true });
   });
 
-  it('uploadFiles/downloadFiles return empty success arrays (no-op for this story)', async () => {
-    const adapter = new SandboxBackendAdapter(makeMockManager(), 'run-123');
-    await expect(adapter.uploadFiles([['a.txt', new Uint8Array()]])).resolves.toEqual([]);
-    await expect(adapter.downloadFiles(['a.txt'])).resolves.toEqual([]);
+  it('uploadFiles base64-round-trips content through runExplore and reports success', async () => {
+    const manager = makeMockManager();
+    const adapter = new SandboxBackendAdapter(manager, 'run-123');
+
+    const result = await adapter.uploadFiles([['/workspace/a.txt', new TextEncoder().encode('hi')]]);
+
+    expect(manager.runExplore).toHaveBeenCalledWith({
+      runId: 'run-123',
+      tier: 'explore',
+      code: expect.stringContaining("base64 -d > '/workspace/a.txt'"),
+    });
+    expect(result).toEqual([{ path: '/workspace/a.txt', error: null }]);
+  });
+
+  it('uploadFiles reports invalid_path on a non-zero exit code', async () => {
+    const manager = makeMockManager();
+    (manager.runExplore as ReturnType<typeof vi.fn>).mockResolvedValue({
+      stdout: '',
+      stderr: 'no such directory',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      exitCode: 1,
+      durationMs: 5,
+    });
+    const adapter = new SandboxBackendAdapter(manager, 'run-123');
+
+    const result = await adapter.uploadFiles([['/no/such/dir/a.txt', new Uint8Array()]]);
+
+    expect(result).toEqual([{ path: '/no/such/dir/a.txt', error: 'invalid_path' }]);
+  });
+
+  it('downloadFiles base64-decodes runExplore stdout back into raw bytes', async () => {
+    const manager = makeMockManager();
+    (manager.runExplore as ReturnType<typeof vi.fn>).mockResolvedValue({
+      stdout: `${Buffer.from('hi').toString('base64')}\n`,
+      stderr: '',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      exitCode: 0,
+      durationMs: 5,
+    });
+    const adapter = new SandboxBackendAdapter(manager, 'run-123');
+
+    const result = await adapter.downloadFiles(['/workspace/a.txt']);
+
+    expect(result).toEqual([{ path: '/workspace/a.txt', content: new TextEncoder().encode('hi'), error: null }]);
+  });
+
+  it('downloadFiles reports file_not_found on a non-zero exit code', async () => {
+    const manager = makeMockManager();
+    (manager.runExplore as ReturnType<typeof vi.fn>).mockResolvedValue({
+      stdout: '',
+      stderr: 'No such file or directory',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      exitCode: 1,
+      durationMs: 5,
+    });
+    const adapter = new SandboxBackendAdapter(manager, 'run-123');
+
+    const result = await adapter.downloadFiles(['/workspace/missing.txt']);
+
+    expect(result).toEqual([{ path: '/workspace/missing.txt', content: null, error: 'file_not_found' }]);
   });
 
   it('dispose() delegates to manager.disposeRun with the constructed runId', async () => {
