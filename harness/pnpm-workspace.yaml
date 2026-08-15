@@ -8,5 +8,4 @@ allowBuilds:
   ssh2: true
 minimumReleaseAgeExclude:
   - '@langchain/core@1.2.7 || 1.2.8'
-  - '@langchain/deepseek@1.1.8'
   - '@langchain/openai@1.5.8'
