@@ -243,11 +243,14 @@ export class SandboxManager {
     return entry;
   }
 
-  // Takes a container, code to run, run_id, and explore/validate flag; returns ExecutionResult,
-  // racing the exec against the configured timeout and killing+removing on expiry.
+  // Takes a container, a shell command line, run_id, and explore/validate flag; returns
+  // ExecutionResult, racing the exec against the configured timeout and killing+removing on expiry.
+  // The command runs verbatim via `sh -c` -- deepagents' execute tool advertises real shell
+  // semantics to the LLM (chaining with &&/;, find/grep, pip install, etc.), so this must actually
+  // be a shell, not a Python interpreter fed the string as source.
   private async execWithTimeout(
     container: Dockerode.Container,
-    code: string,
+    command: string,
     runId: string,
     isExplore: boolean,
   ): Promise<ExecutionResult> {
@@ -255,23 +258,9 @@ export class SandboxManager {
     const stderr = new RingBuffer(this.config.stdioBufferBytes);
     const start = Date.now();
 
-    const doExec = async () => {
-      const writeExec = await container.exec({
-        Cmd: ['sh', '-c', 'cat > /tmp/script.py'],
-        AttachStdin: true,
-      });
-      const writeStream = await writeExec.start({ hijack: true, stdin: true });
-      if (typeof (writeStream as { end?: (d: string) => void })?.end === 'function') {
-        (writeStream as { end: (d: string) => void }).end(code);
-      }
-      if (typeof (writeStream as { on?: (ev: string, cb: () => void) => void })?.on === 'function') {
-        await new Promise<void>((resolve) => {
-          (writeStream as { on: (ev: string, cb: () => void) => void }).on('end', resolve);
-        });
-      }
-
+    const doExec = async (): Promise<Dockerode.Exec> => {
       const runExec = await container.exec({
-        Cmd: ['python', '/tmp/script.py'],
+        Cmd: ['sh', '-c', command],
         AttachStdout: true,
         AttachStderr: true,
       });
@@ -290,6 +279,7 @@ export class SandboxManager {
           runStream.on('end', () => resolve());
         });
       }
+      return runExec;
     };
 
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -300,8 +290,9 @@ export class SandboxManager {
       );
     });
 
+    let runExec: Dockerode.Exec;
     try {
-      await Promise.race([doExec(), timeoutPromise]);
+      runExec = await Promise.race([doExec(), timeoutPromise]);
     } catch (err) {
       if (err instanceof SandboxTimeoutError) {
         await container.kill().catch(() => {});
@@ -315,12 +306,14 @@ export class SandboxManager {
       if (timer) clearTimeout(timer);
     }
 
+    const { ExitCode } = await runExec.inspect();
+
     return {
       stdout: stdout.toString(),
       stderr: stderr.toString(),
       stdoutTruncated: stdout.truncated,
       stderrTruncated: stderr.truncated,
-      exitCode: 0,
+      exitCode: ExitCode ?? 0,
       durationMs: Date.now() - start,
     };
   }
