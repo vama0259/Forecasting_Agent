@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateTraceId } from '../src/tracing/correlation.js';
-import { getLangfuseClient, startForecastTrace } from '../src/tracing/langfuse.js';
+import { startForecastTrace, flushTraces } from '../src/tracing/langfuse.js';
 import type { HarnessConfig } from '../src/config.js';
 
 describe('correlation', () => {
@@ -25,17 +25,26 @@ describe('langfuse tracing', () => {
     },
   };
 
-  it('client initializes from HarnessConfig-supplied keys', () => {
-    const client = getLangfuseClient(config);
-    expect(client).toBeDefined();
+  it('startForecastTrace returns a handle with a real OTel-generated trace ID', () => {
+    const trace = startForecastTrace(config, generateTraceId(), { test: true });
+    expect(typeof trace.traceId).toBe('string');
+    expect(trace.traceId.length).toBeGreaterThan(0);
+    trace.end();
   });
 
   it('supports a 4-level forecast_run -> debate_round -> agent_turn -> tool_call span chain', () => {
-    const client = getLangfuseClient(config);
-    const trace = startForecastTrace(client, generateTraceId());
+    const trace = startForecastTrace(config, generateTraceId(), { test: true });
     const round = trace.span({ name: 'debate_round' });
     const agentTurn = round.span({ name: 'agent_turn' });
     const toolCall = agentTurn.span({ name: 'tool_call' });
     expect(typeof toolCall.end).toBe('function');
+    toolCall.end();
+    agentTurn.end();
+    round.end();
+    trace.end();
+  });
+
+  it('flushTraces resolves without throwing', async () => {
+    await expect(flushTraces(config)).resolves.toBeUndefined();
   });
 });
