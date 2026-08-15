@@ -1,0 +1,17 @@
+(node:432571) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/ts-resolve-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+--- run-real-pipeline: symbol=RELIANCE.NS started 2026-08-15T10:18:16.184Z | mem: rss=312MB heap=72MB/109MB external=11MB ---
+migrations: up to date | mem: rss=317MB heap=52MB/120MB external=26MB
+[9a28ed78-8840-4e78-b811-90d23252a916] run start: symbol=RELIANCE.NS langfuseTraceId=65f972a8c2abca4755922be577c51bc1 | mem: rss=317MB heap=52MB/120MB external=26MB
+[9a28ed78-8840-4e78-b811-90d23252a916] mcp: connecting to 'market' (bash -c cd /home/varunmalhotra/Desktop/Forecasting_Agent && exec uv run python -m forecasting_agent.data_server.server) | mem: rss=317MB heap=52MB/120MB external=26MB
+/home/varunmalhotra/Desktop/Forecasting_Agent/.venv/lib/python3.12/site-packages/pydantic_settings/sources/utils.py:47: IncompleteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.
+  warnings.warn(
+[08/15/26 15:48:17] INFO     Processing request of type            server.py:733
+                             ListToolsRequest
+[9a28ed78-8840-4e78-b811-90d23252a916] mcp: 4 tool(s) loaded: list_markets, resolve_symbol, fetch_ohlcv, fetch_option_chain | mem: rss=317MB heap=56MB/121MB external=26MB
+[9a28ed78-8840-4e78-b811-90d23252a916] agent: invoking for symbol=RELIANCE.NS | mem: rss=318MB heap=59MB/122MB external=26MB
+[08/15/26 15:48:18] INFO     Processing request of type            server.py:733
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:733
+                             CallToolRequest

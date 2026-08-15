@@ -5,7 +5,7 @@ import { SandboxBackendAdapter } from '../../src/sandbox/deepagents-adapter.js';
 import type { SandboxManager } from '../../src/sandbox/manager.js';
 
 describe('buildPriceAnchorAgent', () => {
-  it('constructs a ChatDeepSeek model from the given llm config', () => {
+  it('constructs a ChatOpenAI model pointed at DeepSeek from the given llm config', () => {
     const mockManager = { runExplore: vi.fn(), disposeRun: vi.fn() } as unknown as SandboxManager;
     const backend = new SandboxBackendAdapter(mockManager, 'run-1');
 

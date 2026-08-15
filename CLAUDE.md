@@ -4,10 +4,10 @@
 Private AI-powered forecasting agent. Python 3.12. Repo must stay private.
 
 ## Terminal
-Always use Bash (WSL) for all terminal commands. Never use PowerShell.
+Native Linux (Fedora). Use Bash for all terminal commands.
 
 ## Obsidian Sync (HARD RULE)
-Every session MUST update the Obsidian vault at `C:\Users\vama0\Knowledge` before finishing:
+Every session MUST update the Obsidian vault at `/home/varunmalhotra/Desktop/Knowledge` before finishing:
 1. `Daily/<YYYY-MM-DD>.md` — log what was done
 2. `Projects/Forecasting Agent/Kanban.md` — move tasks between columns
 3. `Projects/Forecasting Agent.md` — update checklist
@@ -286,13 +286,14 @@ Before implementing any module, class, or architectural choice, document:
 
 #### agy — Antigravity CLI Bridge (Gemini delegation)
 
-Self-hosted MCP server (`~/mcp-servers/agy-mcp`, registered user-scope) wrapping Google's Antigravity CLI (`agy`) so Claude can delegate implementation work to Gemini. See `gemini-delegated-implementation` skill for full usage rules — model, effort, instruction quality, parallel dispatch, and the mandatory verification pass.
+**No MCP wrapper on this machine** (the old `~/mcp-servers/agy-mcp` self-hosted server was never rebuilt on native Linux — decided 2026-08-15 to not recreate it). Delegation instead goes through the `agy` CLI directly via Bash: Claude writes the detailed plan/prompt and gathers the file context, then invokes `agy` non-interactively itself. See `gemini-delegated-implementation` skill for full usage rules — instruction quality, parallel dispatch, and the mandatory verification pass still apply exactly as before, just issued as a Bash call instead of an MCP tool call.
 
-- `run_agy` — run a single non-interactive prompt (`agy --print`); accepts `model`, `agent`, `effort`, `mode`, `project`, `conversation`, `continue_session`, `add_dirs`, `dangerously_skip_permissions`, `timeout_seconds`
-- `list_agy_agents` / `list_agy_models` — **unreliable in this sandbox, hang indefinitely** — don't rely on these for live discovery
-- **`--model` fails silently on any non-exact match** (verified) — no error, just keeps whatever model the session already defaulted to. Local default is already Gemini 3.7 Flash (High); omit `model` entirely, or use the exact string `"Gemini 3.7 Flash (High)"` (not `--effort`, which hard-errors on Gemini models). Full details in `gemini-delegated-implementation` skill.
-- Default delegation call: `run_agy(prompt=..., add_dirs=[...], mode="accept-edits")` — no `model`/`effort` needed to get Gemini 3.7 Flash (High) in this environment
-- **Autonomy grant**: same as `codex` — Gemini controls and spends its own tokens/tool-calls for bash commands it runs during `mode="accept-edits"` delegation (tests, repo checks, edits). Claude does not gate each individual `agy` bash invocation. The mandatory post-delegation verification pass (`gemini-delegated-implementation` skill) is the sole final gate before Gemini's output is accepted — Gemini never self-approves its own work.
+- Invoke directly: `agy --print "<prompt>" --add-dir <dir> [--add-dir <dir> ...] --mode accept-edits`
+- `agy --help` lists all flags (`--model`, `--agent`, `--effort`, `--project`, `--conversation`, `--continue`, `--dangerously-skip-permissions`, `--print-timeout`, `--output-format`) if a call needs them
+- `agy list-agents` / `agy list-models` — **unreliable in this sandbox, hang indefinitely** — don't rely on these for live discovery
+- **`--model` fails silently on any non-exact match** (verified) — no error, just keeps whatever model the session already defaulted to. Local default is already Gemini 3.7 Flash (High); omit `--model` entirely, or use the exact string `"Gemini 3.7 Flash (High)"` (not `--effort`, which hard-errors on Gemini models). Full details in `gemini-delegated-implementation` skill.
+- Default delegation call: `agy --print "<prompt>" --add-dir <dirs> --mode accept-edits` — no `--model`/`--effort` needed to get Gemini 3.7 Flash (High) in this environment
+- **Autonomy grant**: same as `codex` — Gemini controls and spends its own tokens/tool-calls for bash commands it runs during `--mode accept-edits` delegation (tests, repo checks, edits). Claude does not gate each individual `agy` bash invocation the CLI makes internally, only the outer `agy` call itself (same as any other Bash tool use). The mandatory post-delegation verification pass (`gemini-delegated-implementation` skill) is the sole final gate before Gemini's output is accepted — Gemini never self-approves its own work.
 
 ##### Gemini delegation — known quality gap (observed #4–#9)
 

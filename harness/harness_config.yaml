@@ -1,21 +1,26 @@
 llm:
-  provider: anthropic
-  model: claude-sonnet-4
+  provider: deepseek
+  model: ${LLM_MODEL}
   api_key: ${LLM_API_KEY}
 
 mcp_servers:
   market:
-    command: node
-    args: ["./servers/market-data/index.js"]
-  web:
-    command: node
-    args: ["./servers/web-search/index.js"]
+    command: uv
+    args: ["run", "--directory", "..", "python", "-m", "forecasting_agent.data_server.server"]
 
 capabilities:
   chat: llm
-  search: web
+  search: llm
   sentiment: llm
   market_data: market
+
+storage:
+  connection_string: ${STORAGE_CONNECTION_STRING}
+
+tracing:
+  langfuse_public_key: ${LANGFUSE_PUBLIC_KEY}
+  langfuse_secret_key: ${LANGFUSE_SECRET_KEY}
+  langfuse_base_url: ${LANGFUSE_BASE_URL}
 
 sandbox: {}
 eval: {}

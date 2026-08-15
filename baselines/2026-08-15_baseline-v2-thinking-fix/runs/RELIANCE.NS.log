@@ -1,0 +1,51 @@
+(node:548900) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/ts-resolve-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+--- run-real-pipeline: symbol=RELIANCE.NS started 2026-08-15T11:13:47.523Z | mem: rss=312MB heap=72MB/110MB external=11MB ---
+migrations: up to date | mem: rss=317MB heap=52MB/121MB external=26MB
+[88490abf-c36a-460f-9f5e-1bca333ed56e] run start: symbol=RELIANCE.NS langfuseTraceId=ab2b1a8946a9f6d9c777e6558f8c3c1c | mem: rss=317MB heap=52MB/121MB external=26MB
+[88490abf-c36a-460f-9f5e-1bca333ed56e] mcp: connecting to 'market' (bash -c cd /home/varunmalhotra/Desktop/Forecasting_Agent && exec uv run python -m forecasting_agent.data_server.server) | mem: rss=317MB heap=52MB/121MB external=26MB
+/home/varunmalhotra/Desktop/Forecasting_Agent/.venv/lib/python3.12/site-packages/pydantic_settings/sources/utils.py:47: IncompleteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.
+  warnings.warn(
+[08/15/26 16:43:48] INFO     Processing request of type            server.py:733
+                             ListToolsRequest
+[88490abf-c36a-460f-9f5e-1bca333ed56e] mcp: 4 tool(s) loaded: list_markets, resolve_symbol, fetch_ohlcv, fetch_option_chain | mem: rss=317MB heap=56MB/121MB external=26MB
+[88490abf-c36a-460f-9f5e-1bca333ed56e] agent: invoking for symbol=RELIANCE.NS | mem: rss=318MB heap=59MB/121MB external=26MB
+[08/15/26 16:43:50] INFO     Processing request of type            server.py:733
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:733
+                             CallToolRequest
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.uploadFiles: start path=/workspace/bars.json bytes=21477
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.uploadFiles: done in 292ms path=/workspace/bars.json exitCode=0
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.execute: start (527 chars): python3 -c "
+import json
+data = json.load(open('/workspace/bars.json'))
+bars = data['bars']
+print('num bars:', len(bars)
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.execute: done in 60ms exitCode=0
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.execute: start (1779 chars): cat > /workspace/compute.py << 'EOF'
+import json, math, statistics
+
+data = json.load(open('/workspace/bars.json'))
+bars
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.execute: done in 104ms exitCode=0
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.execute: start (279 chars): if [ ! -f '/workspace/_arrays.py' ]; then echo "Error: File not found"; exit 1; fi; if [ ! -s '/workspace/_arrays.py' ];
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.execute: done in 31ms exitCode=0
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.uploadFiles: start path=/workspace/model.py bytes=9325
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.uploadFiles: done in 31ms path=/workspace/model.py exitCode=0
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.execute: start (981 chars): cd /workspace && python3 /workspace/model.py && echo "---" && cat /tmp/eval_request.json | python3 -m json.tool > /dev/n
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.execute: done in 93ms exitCode=0
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.execute: start (64 chars): rm -f /workspace/compute.py /workspace/_arrays.py; ls /workspace
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.execute: done in 39ms exitCode=0
+[88490abf-c36a-460f-9f5e-1bca333ed56e] agent: signal={"direction":"down","probability":0.55,"confidence":0.5,"horizon_days":10,"evidence":["RELIANCE.NS drifted from ~1358.7 (2026-04-17) to ~1310.0 (2026-08-14), a net ~-3.6% over the window with negative drift dominating (46 down vs 39 up return days).","Final 5 closes 1327.3, 1323.9, 1329.0, 1317.0, 1310.0 show a fading near-term momentum after the Aug 6-7 rebound to 1334.8.","Walk-forward ES forecast on the last day is negative (-0.0010) with P(up) ~0.47, flipping the signal to hold rather than buy.","Elevated volatility: several single-day moves of -2% to -3.3% (e.g., 2026-05-11 -3.27%, 2026-07-08 -2.41%), so near-term path is choppy and downside-prone.","Support zone ~1265-1278 held in late July but the stock failed to extend the Aug rebound, closing below the recent consolidation midpoint."],"dissent":"The August bounce (low ~1267 on 2026-07-28 to ~1334 on 2026-08-07) showed buyers stepping in, and the ES model is only mildly negative; if the 1300 support holds, an up-leg toward 1340-1360 is plausible, so the edge is thin."} | mem: rss=245MB heap=64MB/116MB external=27MB
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.downloadFiles: start path=/workspace/model.py
+[88490abf-c36a-460f-9f5e-1bca333ed56e] adapter.downloadFiles: done in 27ms path=/workspace/model.py exitCode=0
+[88490abf-c36a-460f-9f5e-1bca333ed56e] sandbox: running validate tier | mem: rss=245MB heap=64MB/116MB external=27MB
+[88490abf-c36a-460f-9f5e-1bca333ed56e] sandbox: validate verdict=[object Object] | mem: rss=245MB heap=64MB/116MB external=27MB
+[88490abf-c36a-460f-9f5e-1bca333ed56e] storage: forecast + agent_signal + eval_result persisted | mem: rss=245MB heap=64MB/116MB external=27MB
+[88490abf-c36a-460f-9f5e-1bca333ed56e] tracing: langfuse trace ab2b1a8946a9f6d9c777e6558f8c3c1c updated | mem: rss=245MB heap=64MB/116MB external=27MB
+[88490abf-c36a-460f-9f5e-1bca333ed56e] sandbox: run disposed | mem: rss=245MB heap=64MB/116MB external=27MB
+[88490abf-c36a-460f-9f5e-1bca333ed56e] mcp: client closed | mem: rss=245MB heap=64MB/116MB external=27MB
+[88490abf-c36a-460f-9f5e-1bca333ed56e] tracing: langfuse flushed | mem: rss=245MB heap=65MB/116MB external=28MB
+--- RESULT --- | mem: rss=245MB heap=65MB/116MB external=28MB
+--- run-real-pipeline: finished 2026-08-15T11:15:40.102Z | mem: rss=245MB heap=65MB/116MB external=28MB ---

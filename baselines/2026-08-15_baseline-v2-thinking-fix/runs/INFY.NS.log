@@ -1,0 +1,48 @@
+(node:558716) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/ts-resolve-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+--- run-real-pipeline: symbol=INFY.NS started 2026-08-15T11:18:35.486Z | mem: rss=304MB heap=67MB/114MB external=10MB ---
+migrations: up to date | mem: rss=305MB heap=68MB/114MB external=26MB
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] run start: symbol=INFY.NS langfuseTraceId=2e8a688cff0b853579e3c750588049bc | mem: rss=305MB heap=69MB/115MB external=26MB
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] mcp: connecting to 'market' (bash -c cd /home/varunmalhotra/Desktop/Forecasting_Agent && exec uv run python -m forecasting_agent.data_server.server) | mem: rss=305MB heap=69MB/115MB external=26MB
+/home/varunmalhotra/Desktop/Forecasting_Agent/.venv/lib/python3.12/site-packages/pydantic_settings/sources/utils.py:47: IncompleteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.
+  warnings.warn(
+[08/15/26 16:48:36] INFO     Processing request of type            server.py:733
+                             ListToolsRequest
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] mcp: 4 tool(s) loaded: list_markets, resolve_symbol, fetch_ohlcv, fetch_option_chain | mem: rss=309MB heap=73MB/116MB external=26MB
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] agent: invoking for symbol=INFY.NS | mem: rss=312MB heap=76MB/116MB external=26MB
+[08/15/26 16:48:37] INFO     Processing request of type            server.py:733
+                             CallToolRequest
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.uploadFiles: start path=/workspace/bars.json bytes=21644
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.uploadFiles: done in 283ms path=/workspace/bars.json exitCode=0
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.execute: start (258 chars): python3 -c "import json; d=json.load(open('/workspace/bars.json')); print('bars:', len(d['bars'])); print('first:', d['b
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.execute: done in 46ms exitCode=0
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.uploadFiles: start path=/workspace/gen.py bytes=3284
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.uploadFiles: done in 30ms path=/workspace/gen.py exitCode=0
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.execute: start (81 chars): cd /workspace && python3 gen.py && python3 model.py && cat /tmp/eval_request.json
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.execute: done in 56ms exitCode=1
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.downloadFiles: start path=/workspace/gen.py
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.downloadFiles: done in 30ms path=/workspace/gen.py exitCode=0
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.uploadFiles: start path=/workspace/gen.py bytes=3285
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.uploadFiles: done in 29ms path=/workspace/gen.py exitCode=0
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.execute: start (81 chars): cd /workspace && python3 gen.py && python3 model.py && cat /tmp/eval_request.json
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.execute: done in 66ms exitCode=0
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.execute: start (272 chars): if [ ! -f '/workspace/model.py' ]; then echo "Error: File not found"; exit 1; fi; if [ ! -s '/workspace/model.py' ]; the
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.execute: start (522 chars): python3 -c "
+import json
+d = json.load(open('/tmp/eval_request.json'))
+for k in ['returns','forecasts','calls','timestam
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.execute: done in 40ms exitCode=0
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.execute: done in 89ms exitCode=0
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] agent: signal={"direction":"up","probability":0.6,"confidence":0.58,"horizon_days":20,"evidence":["Price recovered ~+20% off the 2026-07-01 low (~985) to ~1190 on 2026-08-11","Sustained higher closes through late-July/early-August (Jul 28–Aug 11) consistent with an uptrend","Walk-forward backtest flipped to persistent 'buy' calls for the last ~15 sessions (calls >0.5)","Up days on above-average volume (e.g. Jul 29 ~34.4M, Jul 28 ~28.1M) vs. declining volume into the Aug 12–14 pullback (~5.8M), a healthy consolidation pattern","Last close 1169.2 remains above the rising short-term trend zone (~1150–1180)","No data staleness; all 85 return observations used in the backtest"],"dissent":"The stock is still ~9% below its April high (~1291), and the April/June tape featured outlier crashes with circuit-locked flat sessions and very large volume, so headline volatility is high. A renewed IT-spending/macro selloff could retest the 1100–1120 support; the final three sessions (Aug 12–14) were already a mild pullback from 1190.7, so the near-term edge is modest."} | mem: rss=360MB heap=66MB/106MB external=28MB
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.downloadFiles: start path=/workspace/model.py
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] adapter.downloadFiles: done in 29ms path=/workspace/model.py exitCode=0
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] sandbox: running validate tier | mem: rss=360MB heap=66MB/106MB external=28MB
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] sandbox: validate verdict=[object Object] | mem: rss=360MB heap=66MB/106MB external=28MB
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] storage: forecast + agent_signal + eval_result persisted | mem: rss=360MB heap=66MB/106MB external=28MB
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] tracing: langfuse trace 2e8a688cff0b853579e3c750588049bc updated | mem: rss=360MB heap=66MB/106MB external=28MB
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] sandbox: run disposed | mem: rss=360MB heap=66MB/106MB external=28MB
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] mcp: client closed | mem: rss=360MB heap=66MB/106MB external=28MB
+[e6dbdfba-463d-4113-a05d-0c897d1a8123] tracing: langfuse flushed | mem: rss=361MB heap=68MB/107MB external=28MB
+--- RESULT --- | mem: rss=361MB heap=68MB/107MB external=28MB
+--- run-real-pipeline: finished 2026-08-15T11:20:11.153Z | mem: rss=361MB heap=68MB/107MB external=28MB ---

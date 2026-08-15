@@ -17,6 +17,11 @@ function makeSlowMockDocker() {
     kill: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
     start: vi.fn(async () => {}),
+    modem: {
+      // Registers listeners but the underlying stream's `on()` mock never fires them --
+      // simulates an exec that hangs forever, same as the real timeout scenario.
+      demuxStream: vi.fn(() => {}),
+    },
   };
   const fakeDocker = {
     createContainer: vi.fn(async () => fakeContainer),

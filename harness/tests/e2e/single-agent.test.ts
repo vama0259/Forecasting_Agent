@@ -21,6 +21,9 @@ vi.mock('langchain-mcp-adapters', () => ({
     getTools() {
       return Promise.resolve([]);
     }
+    close() {
+      return Promise.resolve();
+    }
   },
 }));
 
@@ -35,7 +38,17 @@ vi.mock('deepagents', async () => {
 vi.mock('../../src/sandbox/manager.js', () => ({
   SandboxManager: class {
     runValidate = mockRunValidate;
-    runExplore = vi.fn();
+    // Default: no /workspace/model.py in the (mocked, empty) sandbox -- writeModelScript's
+    // downloadFiles() call falls back to its placeholder script, same as before this file
+    // existed to read from.
+    runExplore = vi.fn().mockResolvedValue({
+      stdout: '',
+      stderr: '',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      exitCode: 1,
+      durationMs: 1,
+    });
     disposeRun = mockDisposeRun;
   },
 }));
@@ -43,10 +56,15 @@ vi.mock('../../src/sandbox/manager.js', () => ({
 vi.mock('../../src/storage/repository.js', () => mockSave);
 
 vi.mock('../../src/tracing/langfuse.js', () => ({
-  getLangfuseClient: vi.fn().mockReturnValue({
-    trace: vi.fn().mockReturnValue({ update: vi.fn(), end: vi.fn() }),
+  flushTraces: vi.fn().mockResolvedValue(undefined),
+  getLangchainCallbackHandler: vi.fn().mockReturnValue({}),
+  startForecastTrace: vi.fn().mockReturnValue({
+    traceId: 'trace-1',
+    update: vi.fn(),
+    end: vi.fn(),
+    span: vi.fn(),
+    withActive: vi.fn((fn: () => unknown) => fn()),
   }),
-  startForecastTrace: vi.fn().mockReturnValue({ update: vi.fn(), end: vi.fn() }),
 }));
 
 vi.mock('../../src/tracing/correlation.js', () => ({
@@ -80,6 +98,7 @@ describe('runSingleAgentPipeline', () => {
           }),
         },
       ],
+      structuredResponse: { direction: 'up', probability: 0.6, confidence: 0.7, horizon_days: 5, evidence: [] },
     });
     mockRunValidate.mockResolvedValue({ evalResult: { verdict: 'pass', layers: [], layer_means: {} } });
 
@@ -107,6 +126,7 @@ describe('runSingleAgentPipeline', () => {
           }),
         },
       ],
+      structuredResponse: { direction: 'up', probability: 0.6, confidence: 0.7, horizon_days: 5, evidence: [] },
     });
     mockRunValidate
       .mockRejectedValueOnce(new ValidationFailedError('bad forecast', 'detail-1'))
@@ -133,6 +153,7 @@ describe('runSingleAgentPipeline', () => {
           }),
         },
       ],
+      structuredResponse: { direction: 'up', probability: 0.6, confidence: 0.7, horizon_days: 5, evidence: [] },
     });
     mockRunValidate.mockRejectedValue(new SandboxTimeoutError('timed out'));
 
@@ -161,6 +182,7 @@ describe('runSingleAgentPipeline', () => {
           }),
         },
       ],
+      structuredResponse: { direction: 'up', probability: 0.6, confidence: 0.7, horizon_days: 5, evidence: [] },
     });
     mockRunValidate.mockRejectedValue(new ValidationFailedError('bad', 'detail'));
 

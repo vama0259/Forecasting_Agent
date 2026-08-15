@@ -14,6 +14,7 @@ function makeMockDocker(execDelayMs: number) {
         },
       };
     }),
+    inspect: vi.fn(async () => ({ ExitCode: 0 })),
   };
   const fakeContainer = {
     id: 'fake-container-id',

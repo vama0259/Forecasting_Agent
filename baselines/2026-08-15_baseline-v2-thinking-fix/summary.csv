@@ -1,0 +1,11 @@
+symbol,status,verdict,direction,probability,confidence,elapsed_s
+RELIANCE.NS,pass,VALID,down,0.55,0.5,114
+TCS.NS,pass,VALID,down,0.58,0.6,91
+HDFCBANK.NS,pass,VALID,down,0.58,0.6,83
+INFY.NS,pass,VALID,up,0.6,0.58,97
+ICICIBANK.NS,pass,VALID,up,0.55,0.6,82
+HINDUNILVR.NS,pass,VALID,up,0.53,0.3,89
+SBIN.NS,pass,VALID,up,0.6,0.62,83
+BHARTIARTL.NS,pass,VALID,up,0.6,0.6,92
+KOTAKBANK.NS,pass,VALID,up,0.55,0.58,83
+LT.NS,pass,VALID,up,0.58,0.55,104

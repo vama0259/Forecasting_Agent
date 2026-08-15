@@ -1,0 +1,49 @@
+(node:571113) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/ts-resolve-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+--- run-real-pipeline: symbol=BHARTIARTL.NS started 2026-08-15T11:24:26.379Z | mem: rss=314MB heap=72MB/110MB external=11MB ---
+migrations: up to date | mem: rss=318MB heap=52MB/121MB external=26MB
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] run start: symbol=BHARTIARTL.NS langfuseTraceId=ea208e709426caf54feac46346d5393a | mem: rss=319MB heap=52MB/121MB external=26MB
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] mcp: connecting to 'market' (bash -c cd /home/varunmalhotra/Desktop/Forecasting_Agent && exec uv run python -m forecasting_agent.data_server.server) | mem: rss=319MB heap=52MB/121MB external=26MB
+/home/varunmalhotra/Desktop/Forecasting_Agent/.venv/lib/python3.12/site-packages/pydantic_settings/sources/utils.py:47: IncompleteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.
+  warnings.warn(
+[08/15/26 16:54:27] INFO     Processing request of type            server.py:733
+                             ListToolsRequest
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] mcp: 4 tool(s) loaded: list_markets, resolve_symbol, fetch_ohlcv, fetch_option_chain | mem: rss=319MB heap=56MB/122MB external=26MB
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] agent: invoking for symbol=BHARTIARTL.NS | mem: rss=319MB heap=59MB/122MB external=26MB
+[08/15/26 16:54:29] INFO     Processing request of type            server.py:733
+                             CallToolRequest
+[*********************100%***********************]  1 of 1 completed
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.uploadFiles: start path=/workspace/bars.json bytes=22115
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.uploadFiles: done in 339ms path=/workspace/bars.json exitCode=0
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.execute: start (442 chars): python3 -c "
+import json
+d = json.load(open('/workspace/bars.json'))
+bars = d['bars']
+print('num bars:', len(bars))
+prin
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.execute: done in 49ms exitCode=0
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.uploadFiles: start path=/workspace/gen_model.py bytes=3634
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.uploadFiles: done in 30ms path=/workspace/gen_model.py exitCode=0
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.execute: start (37 chars): cd /workspace && python3 gen_model.py
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.execute: done in 47ms exitCode=0
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.execute: start (63 chars): cd /workspace && python3 model.py && cat /tmp/eval_request.json
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.execute: done in 47ms exitCode=0
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.execute: start (1092 chars): cd /workspace && python3 -c "
+import json
+p = json.load(open('/tmp/eval_request.json'))
+n = len(p['returns'])
+assert n =
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.execute: done in 47ms exitCode=0
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] agent: signal={"direction":"up","probability":0.6,"confidence":0.6,"horizon_days":10,"evidence":["Close rose ~9.2% over the window (1823.95 -> 1992.10) from 2026-04-17 to 2026-08-14","46 of 85 daily returns were positive (54%), and the walk-forward model's buy-day hit rate was 54.9% (28/51)","Higher lows since the early-June trough (~1753) with the last close at 1992.10 near the top of the range","Final session (08-14) gained ~2.7% to 1992.10, just under the period high (~2031 intraday on 08-05)","Recent pullback (1915 on 08-11) was quickly reversed, showing resilient short-term momentum","Backtest probabilities remained >0.5 on most recent days, consistent with a positive drift regime"],"dissent":"Momentum can fade quickly: the early-August spike toward 2031 was followed by a multi-day pullback, and the late-July/early-August bars are flagged as outliers, so elevated volatility cuts both ways over a short horizon."} | mem: rss=349MB heap=91MB/133MB external=31MB
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.downloadFiles: start path=/workspace/model.py
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] adapter.downloadFiles: done in 29ms path=/workspace/model.py exitCode=0
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] sandbox: running validate tier | mem: rss=349MB heap=91MB/133MB external=31MB
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] sandbox: validate verdict=[object Object] | mem: rss=349MB heap=91MB/133MB external=31MB
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] storage: forecast + agent_signal + eval_result persisted | mem: rss=349MB heap=91MB/133MB external=31MB
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] tracing: langfuse trace ea208e709426caf54feac46346d5393a updated | mem: rss=349MB heap=91MB/133MB external=31MB
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] sandbox: run disposed | mem: rss=349MB heap=92MB/133MB external=31MB
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] mcp: client closed | mem: rss=349MB heap=92MB/133MB external=31MB
+[1c950b0c-afa6-424e-8601-889bc4a5c1dd] tracing: langfuse flushed | mem: rss=350MB heap=93MB/134MB external=31MB
+--- RESULT --- | mem: rss=350MB heap=93MB/134MB external=31MB
+--- run-real-pipeline: finished 2026-08-15T11:25:57.322Z | mem: rss=350MB heap=93MB/134MB external=31MB ---
