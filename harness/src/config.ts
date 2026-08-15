@@ -27,6 +27,9 @@ export const HarnessConfigSchema = z.object({
     langfuse_public_key: z.string().min(1),
     langfuse_secret_key: z.string().min(1),
     langfuse_base_url: z.string().min(1),
+    // Groups multiple forecast_run traces (e.g. every symbol in one baseline sweep) into one
+    // Langfuse Session. Left unset for a single ad-hoc run -- each trace stays ungrouped.
+    langfuse_session_id: z.string().min(1).optional(),
   }),
   sandbox: z.record(z.string(), z.unknown()).default({}),
   eval: z.record(z.string(), z.unknown()).default({}),

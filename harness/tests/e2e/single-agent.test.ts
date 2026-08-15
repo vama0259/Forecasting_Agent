@@ -64,6 +64,7 @@ vi.mock('../../src/tracing/langfuse.js', () => ({
     end: vi.fn(),
     span: vi.fn(),
     withActive: vi.fn((fn: () => unknown) => fn()),
+    runGrouped: vi.fn((_attributes: unknown, fn: () => unknown) => fn()),
   }),
 }));
 
