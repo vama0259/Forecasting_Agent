@@ -1,0 +1,55 @@
+(node:574343) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/ts-resolve-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+--- run-real-pipeline: symbol=KOTAKBANK.NS started 2026-08-15T11:25:58.568Z | mem: rss=312MB heap=72MB/109MB external=11MB ---
+migrations: up to date | mem: rss=317MB heap=52MB/121MB external=26MB
+[98ebedbf-c657-4b36-ba88-1f963ef16264] run start: symbol=KOTAKBANK.NS langfuseTraceId=ad6c88a9384363d6f12d84c85cf3f32b | mem: rss=317MB heap=52MB/121MB external=26MB
+[98ebedbf-c657-4b36-ba88-1f963ef16264] mcp: connecting to 'market' (bash -c cd /home/varunmalhotra/Desktop/Forecasting_Agent && exec uv run python -m forecasting_agent.data_server.server) | mem: rss=317MB heap=52MB/121MB external=26MB
+/home/varunmalhotra/Desktop/Forecasting_Agent/.venv/lib/python3.12/site-packages/pydantic_settings/sources/utils.py:47: IncompleteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.
+  warnings.warn(
+[08/15/26 16:55:59] INFO     Processing request of type            server.py:733
+                             ListToolsRequest
+[98ebedbf-c657-4b36-ba88-1f963ef16264] mcp: 4 tool(s) loaded: list_markets, resolve_symbol, fetch_ohlcv, fetch_option_chain | mem: rss=318MB heap=56MB/121MB external=26MB
+[98ebedbf-c657-4b36-ba88-1f963ef16264] agent: invoking for symbol=KOTAKBANK.NS | mem: rss=318MB heap=59MB/121MB external=26MB
+[08/15/26 16:56:01] INFO     Processing request of type            server.py:733
+                             CallToolRequest
+[*********************100%***********************]  1 of 1 completed
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.uploadFiles: start path=/workspace/bars.json bytes=21992
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.uploadFiles: done in 303ms path=/workspace/bars.json exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: start (204 chars): python3 -c "import json; d=json.load(open('/workspace/bars.json')); print('bars:', len(d['bars'])); print('first:', d['b
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: done in 48ms exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.uploadFiles: start path=/workspace/compute.py bytes=2497
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.uploadFiles: done in 30ms path=/workspace/compute.py exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: start (35 chars): cd /workspace && python3 compute.py
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: done in 47ms exitCode=1
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.downloadFiles: start path=/workspace/compute.py
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.downloadFiles: done in 28ms path=/workspace/compute.py exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.uploadFiles: start path=/workspace/compute.py bytes=2518
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.uploadFiles: done in 30ms path=/workspace/compute.py exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: start (35 chars): cd /workspace && python3 compute.py
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: done in 47ms exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.uploadFiles: start path=/workspace/gen_model.py bytes=2279
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.uploadFiles: done in 37ms path=/workspace/gen_model.py exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: start (98 chars): cd /workspace && python3 gen_model.py && python3 /workspace/model.py && cat /tmp/eval_request.json
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: done in 66ms exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: start (590 chars): python3 -c "
+import json
+d = json.load(open('/tmp/eval_request.json'))
+for k in ['returns','forecasts','calls','timestam
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: done in 45ms exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: start (202 chars): cd /workspace && head -30 model.py && echo "---- tail ----" && tail -15 model.py && echo "---- grep check ----" && grep
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: done in 30ms exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: start (318 chars): rm -f /tmp/eval_request.json && python3 /workspace/model.py && echo "exit: $?" && python3 -c "import json; d=json.load(o
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.execute: done in 64ms exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] agent: signal={"direction":"up","probability":0.55,"confidence":0.58,"horizon_days":10,"evidence":["86 daily bars fetched; 85 returns, 43 positive (50.6%) - balanced tape","Price recovered from ~383 (Jul 10 low) to ~391 by Aug 14, a ~2% uptrend","Early August shows 5 of last 7 sessions positive with rising closes","Late-June high ~413 to early-July low ~378 was a sharp correction now partially retraced","Near-term EWMA forecast drift ~0 with call ~0.50; momentum decelerating","Volume light on recent up days (5.7-10M), suggesting tentative rally"],"dissent":"Recent call probability (~0.50) is nearly neutral; the bounce has stalled around 390-400 and volume is fading, so a downward re-test of the mid-380s is a real risk if buyers don't step in."} | mem: rss=353MB heap=80MB/131MB external=30MB
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.downloadFiles: start path=/workspace/model.py
+[98ebedbf-c657-4b36-ba88-1f963ef16264] adapter.downloadFiles: done in 28ms path=/workspace/model.py exitCode=0
+[98ebedbf-c657-4b36-ba88-1f963ef16264] sandbox: running validate tier | mem: rss=353MB heap=80MB/131MB external=30MB
+[98ebedbf-c657-4b36-ba88-1f963ef16264] sandbox: validate verdict=[object Object] | mem: rss=353MB heap=81MB/131MB external=30MB
+[98ebedbf-c657-4b36-ba88-1f963ef16264] storage: forecast + agent_signal + eval_result persisted | mem: rss=353MB heap=81MB/131MB external=30MB
+[98ebedbf-c657-4b36-ba88-1f963ef16264] tracing: langfuse trace ad6c88a9384363d6f12d84c85cf3f32b updated | mem: rss=353MB heap=81MB/131MB external=30MB
+[98ebedbf-c657-4b36-ba88-1f963ef16264] sandbox: run disposed | mem: rss=353MB heap=81MB/131MB external=30MB
+[98ebedbf-c657-4b36-ba88-1f963ef16264] mcp: client closed | mem: rss=353MB heap=81MB/131MB external=30MB
+[98ebedbf-c657-4b36-ba88-1f963ef16264] tracing: langfuse flushed | mem: rss=354MB heap=82MB/132MB external=31MB
+--- RESULT --- | mem: rss=354MB heap=82MB/132MB external=31MB
+--- run-real-pipeline: finished 2026-08-15T11:27:20.662Z | mem: rss=354MB heap=82MB/132MB external=31MB ---

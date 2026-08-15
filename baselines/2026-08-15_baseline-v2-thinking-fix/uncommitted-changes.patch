@@ -1,0 +1,904 @@
+diff --git a/harness/package.json b/harness/package.json
+index b91c527..d5c27fb 100644
+--- a/harness/package.json
++++ b/harness/package.json
+@@ -14,14 +14,19 @@
+     "test": "vitest run"
+   },
+   "dependencies": {
+-    "@langchain/core": "^1.2.7",
+-    "@langchain/deepseek": "^1.1.7",
++    "@langchain/core": "^1.2.8",
+     "@langchain/langgraph": "^1.4.9",
++    "@langchain/openai": "1.5.8",
++    "@langfuse/langchain": "^5.10.0",
++    "@langfuse/otel": "^5.10.0",
++    "@langfuse/tracing": "^5.10.0",
++    "@opentelemetry/api": "^1.9.1",
++    "@opentelemetry/sdk-node": "^0.221.0",
+     "async-mutex": "^0.5.0",
+     "deepagents": "^1.12.3",
+     "dockerode": "^5.0.1",
++    "langchain": "^1.5.8",
+     "langchain-mcp-adapters": "^0.6.0",
+-    "langfuse": "^3.38.20",
+     "pg": "^8.23.0",
+     "uuid": "^11.1.0",
+     "yaml": "^2.9.0",
+diff --git a/harness/src/agents/price-anchor.ts b/harness/src/agents/price-anchor.ts
+index d7e2620..46e5eb5 100644
+--- a/harness/src/agents/price-anchor.ts
++++ b/harness/src/agents/price-anchor.ts
+@@ -2,10 +2,25 @@
+
+ import { createDeepAgent } from 'deepagents';
+ import type { StructuredTool } from '@langchain/core/tools';
+-import { ChatDeepSeek } from '@langchain/deepseek';
++import { ChatOpenAI } from '@langchain/openai';
++import { createMiddleware, toolStrategy } from 'langchain';
++import { z } from 'zod';
+ import type { HarnessConfig } from '../config.js';
+ import type { SandboxBackendAdapter } from '../sandbox/deepagents-adapter.js';
+
++// ADR-023 wire-format signal shape, enforced by the model's structured-output tool call
++// (deepagents' responseFormat) rather than parsed out of freeform text after the fact.
++export const PriceAnchorSignalSchema = z.object({
++  direction: z.enum(['up', 'down']),
++  probability: z.number().min(0).max(1),
++  confidence: z.number().min(0).max(1),
++  horizon_days: z.number().int().positive(),
++  evidence: z.array(z.unknown()),
++  dissent: z.string().optional(),
++});
++
++export type PriceAnchorSignal = z.infer<typeof PriceAnchorSignalSchema>;
++
+ // Parameters for building the price-anchor deep agent instance.
+ export interface BuildPriceAnchorAgentParams {
+   llmConfig: HarnessConfig['llm'];
+@@ -13,8 +28,36 @@ export interface BuildPriceAnchorAgentParams {
+   backend: SandboxBackendAdapter;
+ }
+
++// DeepSeek's OpenAI-compatible endpoint. @langchain/deepseek wraps this same endpoint but
++// exposes no way to control tool_choice per-request, which is required by the workaround below.
++const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
++
++// Verified live against the DeepSeek API (2026-08-15): thinking mode (on by default, and we want
++// it kept on for forecast quality) 400s on any non-"auto" tool_choice ("Thinking mode does not
++// support this tool_choice"). deepagents/toolStrategy() forces tool_choice to "any" on every
++// model turn once a structured responseFormat is set, so every turn 400s. DeepSeek does not yet
++// support response_format:"json_schema" either ("This response_format type is unavailable now"),
++// so the provider-native structured-output strategy isn't an option. This middleware forces
++// tool_choice back to "auto" so thinking mode stays on; the extraction tool call is then
++// voluntary rather than forced, so buildForecastPrompt() must keep telling the model explicitly
++// to finish with the structured signal.
++const keepThinkingCompatibleToolChoice = createMiddleware({
++  name: 'DeepSeekThinkingAutoToolChoice',
++  wrapModelCall: (request, handler) => handler({ ...request, toolChoice: 'auto' }),
++});
++
+ // Takes the LLM config, MCP tools, and a sandbox backend; returns a configured deepagents instance.
+ export function buildPriceAnchorAgent({ llmConfig, tools, backend }: BuildPriceAnchorAgentParams) {
+-  const model = new ChatDeepSeek({ apiKey: llmConfig.api_key, model: llmConfig.model });
+-  return createDeepAgent({ model, tools, backend });
++  const model = new ChatOpenAI({
++    apiKey: llmConfig.api_key,
++    model: llmConfig.model,
++    configuration: { baseURL: DEEPSEEK_BASE_URL },
++  });
++  return createDeepAgent({
++    model,
++    tools,
++    backend,
++    responseFormat: toolStrategy(PriceAnchorSignalSchema),
++    middleware: [keepThinkingCompatibleToolChoice],
++  });
+ }
+diff --git a/harness/src/pipeline/single-agent.ts b/harness/src/pipeline/single-agent.ts
+index 0f24d90..9ea9ac1 100644
+--- a/harness/src/pipeline/single-agent.ts
++++ b/harness/src/pipeline/single-agent.ts
+@@ -6,25 +6,60 @@ import { tmpdir } from 'node:os';
+ import { join } from 'node:path';
+ import type { Pool } from 'pg';
+ import { MultiServerMCPClient } from 'langchain-mcp-adapters';
+-import { buildPriceAnchorAgent } from '../agents/price-anchor.js';
++import { buildPriceAnchorAgent, PriceAnchorSignalSchema } from '../agents/price-anchor.js';
++import type { PriceAnchorSignal } from '../agents/price-anchor.js';
+ import { SandboxBackendAdapter } from '../sandbox/deepagents-adapter.js';
+ import { SandboxManager } from '../sandbox/manager.js';
+ import { ValidationFailedError } from '../sandbox/types.js';
+ import type { EvalResult as SandboxEvalResult } from '../sandbox/types.js';
+ import { saveForecast, saveAgentSignal, saveEvalResult } from '../storage/repository.js';
+-import { getLangfuseClient, startForecastTrace } from '../tracing/langfuse.js';
+-import { generateTraceId } from '../tracing/correlation.js';
++import { startForecastTrace, flushTraces, getLangchainCallbackHandler } from '../tracing/langfuse.js';
+ import type { HarnessConfig } from '../config.js';
+ import type { AgentSignal as AgentSignalRow, EvalResult as EvalResultRow } from '../storage/types.js';
+
+-// ADR-023 wire-format signal shape parsed from the agent output.
+-export interface PriceAnchorSignal {
+-  direction: 'up' | 'down';
+-  probability: number;
+-  confidence: number;
+-  horizon_days: number;
+-  evidence: unknown[];
+-  dissent?: string;
++// Takes nothing; returns the current process's RSS/heap footprint as a short log-friendly string.
++function memSnapshot(): string {
++  const m = process.memoryUsage();
++  const mb = (n: number) => `${Math.round(n / 1024 / 1024)}MB`;
++  return `rss=${mb(m.rss)} heap=${mb(m.heapUsed)}/${mb(m.heapTotal)} external=${mb(m.external)}`;
++}
++
++// Takes a run_id and stage message; logs both to stderr alongside a memory snapshot, so a run's
++// log shows exactly which stage the process's memory footprint was at.
++function logStage(runId: string, message: string): void {
++  console.error(`[${runId}] ${message} | mem: ${memSnapshot()}`);
++}
++
++// Bounds a single agent.invoke() call two ways: LangGraph's own recursionLimit caps how many
++// reasoning/tool-call steps the agent graph can take, and a wall-clock timeout + AbortSignal
++// catches anything that loop-count alone wouldn't (e.g. a stuck retry below the graph level) --
++// observed in testing: an invoke ran 300+ consecutive tool calls over 9+ minutes with neither bound in place.
++const AGENT_RECURSION_LIMIT = 100;
++const AGENT_INVOKE_TIMEOUT_MS = 180_000;
++
++export class AgentInvokeTimeoutError extends Error {}
++
++// Takes a function that performs one agent.invoke() call given a {recursionLimit, signal}
++// config, and the run_id for the error message; returns its result or throws
++// AgentInvokeTimeoutError, aborting the underlying LangGraph run past the timeout.
++async function invokeAgentWithBudget<T>(
++  invoke: (config: { recursionLimit: number; signal: AbortSignal }) => Promise<T>,
++  runId: string,
++): Promise<T> {
++  const controller = new AbortController();
++  const timer = setTimeout(() => {
++    controller.abort();
++  }, AGENT_INVOKE_TIMEOUT_MS);
++  try {
++    return await invoke({ recursionLimit: AGENT_RECURSION_LIMIT, signal: controller.signal });
++  } catch (err) {
++    if (controller.signal.aborted) {
++      throw new AgentInvokeTimeoutError(`agent.invoke exceeded ${AGENT_INVOKE_TIMEOUT_MS}ms for run ${runId}`);
++    }
++    throw err;
++  } finally {
++    clearTimeout(timer);
++  }
+ }
+
+ // Parameters required to execute a single-agent forecasting pipeline run.
+@@ -47,44 +82,57 @@ export async function runSingleAgentPipeline({
+   symbol,
+ }: RunSingleAgentPipelineParams): Promise<RunSingleAgentPipelineResult> {
+   const runId = randomUUID();
+-  const traceId = generateTraceId();
+   const asOf = new Date();
+-  const langfuse = getLangfuseClient(config);
+-  const trace = startForecastTrace(langfuse, traceId);
++  const trace = startForecastTrace(config, runId, { symbol, asOf: asOf.toISOString() });
++  const langfuseHandler = getLangchainCallbackHandler(config);
++  logStage(runId, `run start: symbol=${symbol} langfuseTraceId=${trace.traceId}`);
+
+   const serverName = config.capabilities.market_data;
+   const mcpConfig = config.mcp_servers[serverName];
+   if (!mcpConfig) {
+     throw new Error(`MCP server configuration missing for capability 'market_data' (${serverName})`);
+   }
++  logStage(runId, `mcp: connecting to '${serverName}' (${mcpConfig.command} ${mcpConfig.args.join(' ')})`);
+   const mcpClient = new MultiServerMCPClient({ [serverName]: mcpConfig });
+   const tools = await mcpClient.getTools();
++  logStage(runId, `mcp: ${tools.length} tool(s) loaded: ${tools.map((t) => t.name).join(', ')}`);
+
+   const sandboxManager = new SandboxManager();
+   const adapter = new SandboxBackendAdapter(sandboxManager, runId);
+
+   try {
+     const agent = buildPriceAnchorAgent({ llmConfig: config.llm, tools, backend: adapter });
+-    const prompt = `Write and execute a Python exponential-smoothing forecast for ${symbol} using the available market data tool, then output only a JSON object matching {direction, probability, confidence, horizon_days, evidence, dissent?}.`;
++    const prompt = buildForecastPrompt(symbol, asOf);
+
+     let messages: Array<{ role: 'user'; content: string }> = [{ role: 'user', content: prompt }];
+-    let invokeResult = await agent.invoke({ messages });
+-    let signal = parseSignal(invokeResult);
+-    let modelScriptPath = writeModelScript(signal, runId, invokeResult);
++    logStage(runId, `agent: invoking for symbol=${symbol}`);
++    let invokeResult = await trace.withActive(() =>
++      invokeAgentWithBudget((cfg) => agent.invoke({ messages }, { ...cfg, callbacks: [langfuseHandler] }), runId),
++    );
++    let signal = extractSignal(invokeResult);
++    logStage(runId, `agent: signal=${JSON.stringify(signal)}`);
++    let modelScriptPath = await writeModelScript(adapter, signal, runId);
+
+     let evalResult: SandboxEvalResult | undefined;
+     try {
++      logStage(runId, 'sandbox: running validate tier');
+       const validateResult = await sandboxManager.runValidate({ runId, tier: 'validate', modelScriptPath });
+       evalResult = validateResult.evalResult;
++      logStage(runId, `sandbox: validate verdict=${evalResult?.verdict}`);
+     } catch (err) {
+       if (err instanceof ValidationFailedError) {
++        logStage(runId, `sandbox: validation failed (${err.detail}); retrying agent once`);
+         unlinkModelScript(modelScriptPath);
+         messages = [...messages, { role: 'user', content: err.detail }];
+-        invokeResult = await agent.invoke({ messages });
+-        signal = parseSignal(invokeResult);
+-        modelScriptPath = writeModelScript(signal, runId, invokeResult);
++        invokeResult = await trace.withActive(() =>
++          invokeAgentWithBudget((cfg) => agent.invoke({ messages }, { ...cfg, callbacks: [langfuseHandler] }), runId),
++        );
++        signal = extractSignal(invokeResult);
++        logStage(runId, `agent: retry signal=${JSON.stringify(signal)}`);
++        modelScriptPath = await writeModelScript(adapter, signal, runId);
+         const retryResult = await sandboxManager.runValidate({ runId, tier: 'validate', modelScriptPath });
+         evalResult = retryResult.evalResult;
++        logStage(runId, `sandbox: retry validate verdict=${evalResult?.verdict}`);
+       } else {
+         throw err;
+       }
+@@ -103,59 +151,99 @@ export async function runSingleAgentPipeline({
+     });
+     await saveAgentSignal(pool, forecastRow);
+     await saveEvalResult(pool, evalResult as unknown as EvalResultRow);
++    logStage(runId, 'storage: forecast + agent_signal + eval_result persisted');
+
+-    trace.update({ metadata: { symbol, runId } });
++    trace.update({ metadata: { symbol, runId }, output: { signal, verdict: evalResult.verdict } });
++    logStage(runId, `tracing: langfuse trace ${trace.traceId} updated`);
+     return { signal, evalResult };
+   } finally {
+     await adapter.dispose();
++    logStage(runId, 'sandbox: run disposed');
++    // Without this the MCP server's child process (and its stdio pipes) stays alive after the
++    // pipeline returns, so a short-lived CLI run never actually exits the Node event loop.
++    await mcpClient.close();
++    logStage(runId, 'mcp: client closed');
++    trace.end();
++    // OTel spans export on end(), but the span processor batches its own network sends -- a
++    // short-lived CLI run can exit before that batch timer ever fires. Flush explicitly here
++    // so every run, success or failure, actually reaches Langfuse before the process exits.
++    await flushTraces(config);
++    logStage(runId, 'tracing: langfuse flushed');
+   }
+ }
+
+-// Takes raw agent invoke output; extracts and parses the JSON signal according to AgentSignal schema.
+-function parseSignal(invokeResult: { messages: Array<{ content: unknown }> }): PriceAnchorSignal {
+-  const last = invokeResult.messages[invokeResult.messages.length - 1];
+-  const content = typeof last?.content === 'string' ? last.content : '';
+-  const parsed: unknown = JSON.parse(content);
+-  if (
+-    typeof parsed !== 'object' ||
+-    parsed === null ||
+-    !('direction' in parsed) ||
+-    !('probability' in parsed) ||
+-    !('confidence' in parsed) ||
+-    !('horizon_days' in parsed)
+-  ) {
+-    throw new Error('agent response does not match AgentSignal shape');
+-  }
+-  return parsed as PriceAnchorSignal;
++// Takes a symbol and as-of timestamp; returns the full task prompt, including the exact
++// market-data tool signature, a concrete date range (so the agent never has to guess "today"),
++// and the /tmp/eval_request.json contract validate.py requires -- without this the validate
++// tier fails on a missing file, since the agent has no other way to learn that contract.
++function buildForecastPrompt(symbol: string, asOf: Date): string {
++  const end = asOf.toISOString().slice(0, 10);
++  const start = new Date(asOf.getTime() - 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
++  return `Produce a price-direction forecast for ${symbol} (NSE) as of ${end}.
++
++1. Call the market data tool: fetch_ohlcv(symbol="${symbol}", market="NSE", start="${start}", end="${end}", as_of="${end}").
++   It returns {symbol, market, bars: [{date, open, high, low, close, volume}, ...], data_stale}, oldest bar first.
++   Immediately use write_file to save that exact tool result to /workspace/bars.json. Do this
++   once, right after fetching -- do NOT retype, re-paste, or hand-copy any dates/prices from the
++   tool output into a script anywhere below; always load them back with
++   \`json.load(open('/workspace/bars.json'))\`. Retyping numbers from memory is how bar counts go
++   wrong (it's easy to drop or duplicate one by hand) and wastes turns re-deriving data you
++   already have on disk.
++
++2. From the bars in /workspace/bars.json, compute a walk-forward backtest, not a single point forecast:
++   - returns[i] = (close[i] - close[i-1]) / close[i-1] for each consecutive pair of bars (so len(returns) == len(bars) - 1).
++   - forecasts[i] = your predicted return for day i (e.g. an exponential-smoothing estimate fit only on returns[0..i-1]).
++   - calls[i] = your predicted probability (0.0-1.0) that returns[i] is positive.
++   - timestamps[i] = that bar's date as an ISO-8601 datetime with a timezone (e.g. "2026-08-15T00:00:00+05:30").
++   - trade_side[i] = "buy" if calls[i] > 0.5, else "hold".
++   - position_notional[i] = 10000.0 when trade_side[i] is "buy", else 0.0 (must be > 0 whenever trade_side is "buy" or "sell").
++   You need at least ~30 usable days of returns for the backtest to be meaningful. If you need to
++   double check the bar count or inspect the data, read /workspace/bars.json directly (e.g.
++   \`python3 -c "import json; print(len(json.load(open('/workspace/bars.json'))['bars']))"\`) --
++   never grep or search outside /workspace, and never grep the filesystem root.
++
++3. Use the write_file tool to save a SELF-CONTAINED Python script to exactly this path:
++   /workspace/model.py -- this exact file is what gets graded, nothing else you write or say
++   counts. It will be re-executed later with NO network access, so it must NOT call fetch_ohlcv
++   or any other tool again -- embed the returns/forecasts/calls/timestamps you already computed
++   directly as literal Python lists in the script. When run standalone (\`python /workspace/model.py\`),
++   the script must:
++   - Write a JSON object to /tmp/eval_request.json with exactly these keys: returns, forecasts,
++     calls, timestamps, as_of (ISO datetime with timezone, e.g. "${end}T00:00:00+05:30"),
++     segment ("EQUITY_DELIVERY"), position_notional, trade_side, capital (a positive number,
++     e.g. 100000.0). returns/forecasts/calls/timestamps/position_notional/trade_side must all be
++     the same length.
++   - Exit with code 0 on success.
++   Before finishing, run \`python /workspace/model.py && cat /tmp/eval_request.json\` yourself via
++   execute to confirm the file is actually produced -- do not finish until that succeeds.
++
++4. Separately, as your structured final response, give your own overall forecast for ${symbol}
++   over the next horizon_days: direction ("up"/"down"), probability, confidence, horizon_days,
++   evidence (list of short strings citing what you observed in the data), and an optional dissent.`;
+ }
+
+-// Takes parsed signal, run ID, and optional invoke result; writes generated code or placeholder to a temp file.
+-function writeModelScript(
+-  signal: PriceAnchorSignal,
+-  runId: string,
+-  invokeResult?: { messages: Array<{ content: unknown }> },
+-): string {
++// Takes raw agent invoke output; validates its model-enforced structuredResponse against
++// PriceAnchorSignalSchema. No text parsing -- deepagents' responseFormat (LangChain
++// structured output) already forces the model to emit this shape via a tool call.
++function extractSignal(invokeResult: { structuredResponse?: unknown }): PriceAnchorSignal {
++  return PriceAnchorSignalSchema.parse(invokeResult.structuredResponse);
++}
++
++// Takes the sandbox adapter, parsed signal, and run ID; reads back the agent's own
++// /workspace/model.py (written via the write_file tool during explore) and copies it to a host
++// temp path for the validate tier to bind-mount -- no transcript scraping, the file the agent
++// actually wrote and tested is the one that gets validated.
++async function writeModelScript(adapter: SandboxBackendAdapter, signal: PriceAnchorSignal, runId: string): Promise<string> {
+   const path = join(tmpdir(), `model-${runId}.py`);
+-  const capturedCode = invokeResult ? extractPythonCode(invokeResult) : undefined;
+-  const scriptContent = capturedCode ?? `# generated forecast script\nSIGNAL = ${JSON.stringify(signal)}\n`;
++  const [downloaded] = await adapter.downloadFiles(['/workspace/model.py']);
++  const scriptContent =
++    downloaded?.content && !downloaded.error
++      ? Buffer.from(downloaded.content).toString('utf8')
++      : `# no /workspace/model.py found -- placeholder\nSIGNAL = ${JSON.stringify(signal)}\n`;
+   writeFileSync(path, scriptContent);
+   return path;
+ }
+
+-// Takes invoke messages; extracts any Python code blocks generated by the agent.
+-function extractPythonCode(invokeResult: { messages: Array<{ content: unknown }> }): string | undefined {
+-  for (let i = invokeResult.messages.length - 1; i >= 0; i--) {
+-    const msg = invokeResult.messages[i];
+-    if (typeof msg?.content === 'string') {
+-      const match = msg.content.match(/```(?:python)?\s*([\s\S]*?)```/);
+-      if (match && match[1]?.trim()) {
+-        return match[1].trim();
+-      }
+-    }
+-  }
+-  return undefined;
+-}
+-
+ // Takes a file path; safely removes the temp script file if it exists on disk.
+ function unlinkModelScript(path: string): void {
+   try {
+diff --git a/harness/src/sandbox/deepagents-adapter.ts b/harness/src/sandbox/deepagents-adapter.ts
+index cbd35dd..4ad725d 100644
+--- a/harness/src/sandbox/deepagents-adapter.ts
++++ b/harness/src/sandbox/deepagents-adapter.ts
+@@ -4,6 +4,11 @@ import { BaseSandbox } from 'deepagents';
+ import type { ExecuteResponse, FileUploadResponse, FileDownloadResponse } from 'deepagents';
+ import type { SandboxManager } from './manager.js';
+
++// Takes a POSIX path; returns it single-quoted for safe interpolation into a `sh -c` string.
++function shellQuote(path: string): string {
++  return `'${path.replaceAll("'", `'\\''`)}'`;
++}
++
+ // Bridges a SandboxManager instance to deepagents BaseSandbox for one agent run.
+ export class SandboxBackendAdapter extends BaseSandbox {
+   readonly id: string;
+@@ -18,7 +23,10 @@ export class SandboxBackendAdapter extends BaseSandbox {
+
+   // Takes Python source as code; returns its ExecuteResponse via the explore tier.
+   async execute(command: string): Promise<ExecuteResponse> {
++    const start = Date.now();
++    console.error(`[${this.id}] adapter.execute: start (${command.length} chars): ${command.slice(0, 120)}`);
+     const result = await this.#manager.runExplore({ runId: this.id, tier: 'explore', code: command });
++    console.error(`[${this.id}] adapter.execute: done in ${Date.now() - start}ms exitCode=${result.exitCode}`);
+     return {
+       output: result.stdout + result.stderr,
+       exitCode: result.exitCode,
+@@ -26,16 +34,43 @@ export class SandboxBackendAdapter extends BaseSandbox {
+     };
+   }
+
+-  // Takes file tuples; returns empty array as file upload is not supported in this story.
+-  uploadFiles(_files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
+-    void _files;
+-    return Promise.resolve([]);
++  // Takes [path, bytes] tuples; base64-round-trips each through the explore-tier shell
++  // (binary-safe, no Docker archive API needed) and returns per-file upload results.
++  async uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
++    const results: FileUploadResponse[] = [];
++    for (const [path, bytes] of files) {
++      const start = Date.now();
++      console.error(`[${this.id}] adapter.uploadFiles: start path=${path} bytes=${bytes.length}`);
++      const base64 = Buffer.from(bytes).toString('base64');
++      const dir = shellQuote(path.slice(0, path.lastIndexOf('/')) || '/');
++      const command = `mkdir -p ${dir} && printf '%s' '${base64}' | base64 -d > ${shellQuote(path)}`;
++      const result = await this.#manager.runExplore({ runId: this.id, tier: 'explore', code: command });
++      console.error(`[${this.id}] adapter.uploadFiles: done in ${Date.now() - start}ms path=${path} exitCode=${result.exitCode}`);
++      results.push({ path, error: result.exitCode === 0 ? null : 'invalid_path' });
++    }
++    return results;
+   }
+
+-  // Takes paths; returns empty array as file download is not supported in this story.
+-  downloadFiles(_paths: string[]): Promise<FileDownloadResponse[]> {
+-    void _paths;
+-    return Promise.resolve([]);
++  // Takes file paths; base64-reads each back out through the explore-tier shell and returns
++  // per-file raw bytes (or a file_not_found error on non-zero exit).
++  async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
++    const results: FileDownloadResponse[] = [];
++    for (const path of paths) {
++      const start = Date.now();
++      console.error(`[${this.id}] adapter.downloadFiles: start path=${path}`);
++      const result = await this.#manager.runExplore({
++        runId: this.id,
++        tier: 'explore',
++        code: `base64 -w0 ${shellQuote(path)}`,
++      });
++      console.error(`[${this.id}] adapter.downloadFiles: done in ${Date.now() - start}ms path=${path} exitCode=${result.exitCode}`);
++      if (result.exitCode !== 0) {
++        results.push({ path, content: null, error: 'file_not_found' });
++        continue;
++      }
++      results.push({ path, content: new Uint8Array(Buffer.from(result.stdout.trim(), 'base64')), error: null });
++    }
++    return results;
+   }
+
+   // Takes nothing; disposes the sandbox run and returns void.
+diff --git a/harness/src/sandbox/manager.ts b/harness/src/sandbox/manager.ts
+index 24c15b0..c765051 100644
+--- a/harness/src/sandbox/manager.ts
++++ b/harness/src/sandbox/manager.ts
+@@ -243,11 +243,14 @@ export class SandboxManager {
+     return entry;
+   }
+
+-  // Takes a container, code to run, run_id, and explore/validate flag; returns ExecutionResult,
+-  // racing the exec against the configured timeout and killing+removing on expiry.
++  // Takes a container, a shell command line, run_id, and explore/validate flag; returns
++  // ExecutionResult, racing the exec against the configured timeout and killing+removing on expiry.
++  // The command runs verbatim via `sh -c` -- deepagents' execute tool advertises real shell
++  // semantics to the LLM (chaining with &&/;, find/grep, pip install, etc.), so this must actually
++  // be a shell, not a Python interpreter fed the string as source.
+   private async execWithTimeout(
+     container: Dockerode.Container,
+-    code: string,
++    command: string,
+     runId: string,
+     isExplore: boolean,
+   ): Promise<ExecutionResult> {
+@@ -255,23 +258,9 @@ export class SandboxManager {
+     const stderr = new RingBuffer(this.config.stdioBufferBytes);
+     const start = Date.now();
+
+-    const doExec = async () => {
+-      const writeExec = await container.exec({
+-        Cmd: ['sh', '-c', 'cat > /tmp/script.py'],
+-        AttachStdin: true,
+-      });
+-      const writeStream = await writeExec.start({ hijack: true, stdin: true });
+-      if (typeof (writeStream as { end?: (d: string) => void })?.end === 'function') {
+-        (writeStream as { end: (d: string) => void }).end(code);
+-      }
+-      if (typeof (writeStream as { on?: (ev: string, cb: () => void) => void })?.on === 'function') {
+-        await new Promise<void>((resolve) => {
+-          (writeStream as { on: (ev: string, cb: () => void) => void }).on('end', resolve);
+-        });
+-      }
+-
++    const doExec = async (): Promise<Dockerode.Exec> => {
+       const runExec = await container.exec({
+-        Cmd: ['python', '/tmp/script.py'],
++        Cmd: ['sh', '-c', command],
+         AttachStdout: true,
+         AttachStderr: true,
+       });
+@@ -290,6 +279,7 @@ export class SandboxManager {
+           runStream.on('end', () => resolve());
+         });
+       }
++      return runExec;
+     };
+
+     let timer: ReturnType<typeof setTimeout> | undefined;
+@@ -300,8 +290,9 @@ export class SandboxManager {
+       );
+     });
+
++    let runExec: Dockerode.Exec;
+     try {
+-      await Promise.race([doExec(), timeoutPromise]);
++      runExec = await Promise.race([doExec(), timeoutPromise]);
+     } catch (err) {
+       if (err instanceof SandboxTimeoutError) {
+         await container.kill().catch(() => {});
+@@ -315,12 +306,14 @@ export class SandboxManager {
+       if (timer) clearTimeout(timer);
+     }
+
++    const { ExitCode } = await runExec.inspect();
++
+     return {
+       stdout: stdout.toString(),
+       stderr: stderr.toString(),
+       stdoutTruncated: stdout.truncated,
+       stderrTruncated: stderr.truncated,
+-      exitCode: 0,
++      exitCode: ExitCode ?? 0,
+       durationMs: Date.now() - start,
+     };
+   }
+diff --git a/harness/src/tracing/langfuse.ts b/harness/src/tracing/langfuse.ts
+index 8d8bd10..b6bd376 100644
+--- a/harness/src/tracing/langfuse.ts
++++ b/harness/src/tracing/langfuse.ts
+@@ -1,14 +1,106 @@
+-import { Langfuse, type LangfuseTraceClient } from 'langfuse';
++// OpenTelemetry-based Langfuse tracing (ADR-030 v2) via the real current SDK
++// (@langfuse/tracing + @langfuse/otel), not the legacy v3 `langfuse` npm client. The legacy
++// client only speaks self-hosted v4's dual-write compatibility bridge, and those events land
++// with several minutes of propagation lag; native OTLP ingestion has none (per Langfuse's own
++// migration docs: "observations appear in the unified table without the legacy ingestion delay").
++
++import { NodeSDK } from '@opentelemetry/sdk-node';
++import { LangfuseSpanProcessor } from '@langfuse/otel';
++import { startObservation, type LangfuseSpan } from '@langfuse/tracing';
++import { CallbackHandler } from '@langfuse/langchain';
++import { trace, context } from '@opentelemetry/api';
+ import type { HarnessConfig } from '../config.js';
+
+-export function getLangfuseClient(config: HarnessConfig): Langfuse {
+-  return new Langfuse({
+-    publicKey: config.tracing.langfuse_public_key,
+-    secretKey: config.tracing.langfuse_secret_key,
+-    baseUrl: config.tracing.langfuse_base_url,
+-  });
++// Wraps a LangfuseSpan with the chainable forecast_run -> debate_round -> agent_turn -> tool_call
++// span-nesting contract the pipeline and its tests depend on.
++export class TraceHandle {
++  readonly traceId: string;
++  private readonly current: LangfuseSpan;
++
++  constructor(current: LangfuseSpan) {
++    this.current = current;
++    this.traceId = current.traceId;
++  }
++
++  // Takes a child span name; returns a new TraceHandle nested under this span via OTel context.
++  span({ name }: { name: string }): TraceHandle {
++    const parentContext = trace.setSpan(context.active(), this.current.otelSpan);
++    const child = context.with(parentContext, () => startObservation(name));
++    return new TraceHandle(child);
++  }
++
++  // Takes span update attributes; merges them onto the underlying span. input/output belong on
++  // the root observation per Langfuse v4+'s data model (trace-level input/output is deprecated).
++  update({
++    metadata,
++    input,
++    output,
++  }: {
++    metadata?: Record<string, unknown>;
++    input?: unknown;
++    output?: unknown;
++  }): void {
++    this.current.update({ ...(metadata !== undefined && { metadata }), ...(input !== undefined && { input }), ...(output !== undefined && { output }) });
++  }
++
++  // Takes nothing; ends the underlying span.
++  end(): void {
++    this.current.end();
++  }
++
++  // Takes a function; runs it with this span active in the OTel context, so anything created
++  // inside (including LangChain's CallbackHandler-driven spans) nests underneath it as a child,
++  // matching Langfuse's documented LangChain interoperability pattern.
++  withActive<T>(fn: () => T): T {
++    return context.with(trace.setSpan(context.active(), this.current.otelSpan), fn);
++  }
++}
++
++let spanProcessor: LangfuseSpanProcessor | undefined;
++
++// Takes the harness config; returns the process-wide Langfuse span processor, registering the
++// OTel NodeSDK exactly once regardless of how many pipeline runs call this in one process.
++function getSpanProcessor(config: HarnessConfig): LangfuseSpanProcessor {
++  if (!spanProcessor) {
++    spanProcessor = new LangfuseSpanProcessor({
++      publicKey: config.tracing.langfuse_public_key,
++      secretKey: config.tracing.langfuse_secret_key,
++      baseUrl: config.tracing.langfuse_base_url,
++    });
++    new NodeSDK({ spanProcessors: [spanProcessor] }).start();
++  }
++  return spanProcessor;
++}
++
++// Takes the harness config, correlation ID (logged, not the Langfuse trace ID -- OTel generates
++// that on span creation), and the run's input; starts and returns the root forecast_run span.
++export function startForecastTrace(config: HarnessConfig, correlationId: string, input: unknown): TraceHandle {
++  getSpanProcessor(config);
++  const span = startObservation('forecast_run', { input, metadata: { 'correlation.id': correlationId } });
++  return new TraceHandle(span);
++}
++
++let callbackHandler: CallbackHandler | undefined;
++
++// Takes the harness config; returns a process-wide LangChain CallbackHandler. Pass it as
++// `callbacks: [handler]` in agent.invoke() config to auto-capture every LLM call, tool call, and
++// LangGraph step as its own nested observation, instead of only the one manually-created root span.
++export function getLangchainCallbackHandler(config: HarnessConfig): CallbackHandler {
++  getSpanProcessor(config);
++  if (!callbackHandler) {
++    callbackHandler = new CallbackHandler();
++  }
++  return callbackHandler;
+ }
+
+-export function startForecastTrace(client: Langfuse, traceId: string): LangfuseTraceClient {
+-  return client.trace({ name: 'forecast_run', id: traceId });
++// Takes the harness config; flushes all pending spans to Langfuse. Call once per pipeline run in
++// a finally block -- short-lived CLI runs can exit before any background timer would flush.
++// Unlike observation creation (which the SDK guarantees never throws), forceFlush() propagates
++// real network errors -- caught and logged here so a Langfuse outage never fails the pipeline.
++export async function flushTraces(config: HarnessConfig): Promise<void> {
++  try {
++    await getSpanProcessor(config).forceFlush();
++  } catch (err) {
++    console.error('tracing: langfuse flush failed (pipeline result is unaffected):', err);
++  }
+ }
+diff --git a/harness/tests/agents/price-anchor.test.ts b/harness/tests/agents/price-anchor.test.ts
+index f37805e..d25e098 100644
+--- a/harness/tests/agents/price-anchor.test.ts
++++ b/harness/tests/agents/price-anchor.test.ts
+@@ -5,7 +5,7 @@ import { SandboxBackendAdapter } from '../../src/sandbox/deepagents-adapter.js';
+ import type { SandboxManager } from '../../src/sandbox/manager.js';
+
+ describe('buildPriceAnchorAgent', () => {
+-  it('constructs a ChatDeepSeek model from the given llm config', () => {
++  it('constructs a ChatOpenAI model pointed at DeepSeek from the given llm config', () => {
+     const mockManager = { runExplore: vi.fn(), disposeRun: vi.fn() } as unknown as SandboxManager;
+     const backend = new SandboxBackendAdapter(mockManager, 'run-1');
+
+diff --git a/harness/tests/e2e/single-agent.test.ts b/harness/tests/e2e/single-agent.test.ts
+index 22e0604..7ae1d50 100644
+--- a/harness/tests/e2e/single-agent.test.ts
++++ b/harness/tests/e2e/single-agent.test.ts
+@@ -21,6 +21,9 @@ vi.mock('langchain-mcp-adapters', () => ({
+     getTools() {
+       return Promise.resolve([]);
+     }
++    close() {
++      return Promise.resolve();
++    }
+   },
+ }));
+
+@@ -35,7 +38,12 @@ vi.mock('deepagents', async () => {
+ vi.mock('../../src/sandbox/manager.js', () => ({
+   SandboxManager: class {
+     runValidate = mockRunValidate;
+-    runExplore = vi.fn();
++    // Default: no /workspace/model.py in the (mocked, empty) sandbox -- writeModelScript's
++    // downloadFiles() call falls back to its placeholder script, same as before this file
++    // existed to read from.
++    runExplore = vi
++      .fn()
++      .mockResolvedValue({ stdout: '', stderr: '', stdoutTruncated: false, stderrTruncated: false, exitCode: 1, durationMs: 1 });
+     disposeRun = mockDisposeRun;
+   },
+ }));
+@@ -43,10 +51,15 @@ vi.mock('../../src/sandbox/manager.js', () => ({
+ vi.mock('../../src/storage/repository.js', () => mockSave);
+
+ vi.mock('../../src/tracing/langfuse.js', () => ({
+-  getLangfuseClient: vi.fn().mockReturnValue({
+-    trace: vi.fn().mockReturnValue({ update: vi.fn(), end: vi.fn() }),
++  flushTraces: vi.fn().mockResolvedValue(undefined),
++  getLangchainCallbackHandler: vi.fn().mockReturnValue({}),
++  startForecastTrace: vi.fn().mockReturnValue({
++    traceId: 'trace-1',
++    update: vi.fn(),
++    end: vi.fn(),
++    span: vi.fn(),
++    withActive: vi.fn((fn: () => unknown) => fn()),
+   }),
+-  startForecastTrace: vi.fn().mockReturnValue({ update: vi.fn(), end: vi.fn() }),
+ }));
+
+ vi.mock('../../src/tracing/correlation.js', () => ({
+@@ -80,6 +93,7 @@ describe('runSingleAgentPipeline', () => {
+           }),
+         },
+       ],
++      structuredResponse: { direction: 'up', probability: 0.6, confidence: 0.7, horizon_days: 5, evidence: [] },
+     });
+     mockRunValidate.mockResolvedValue({ evalResult: { verdict: 'pass', layers: [], layer_means: {} } });
+
+@@ -107,6 +121,7 @@ describe('runSingleAgentPipeline', () => {
+           }),
+         },
+       ],
++      structuredResponse: { direction: 'up', probability: 0.6, confidence: 0.7, horizon_days: 5, evidence: [] },
+     });
+     mockRunValidate
+       .mockRejectedValueOnce(new ValidationFailedError('bad forecast', 'detail-1'))
+@@ -133,6 +148,7 @@ describe('runSingleAgentPipeline', () => {
+           }),
+         },
+       ],
++      structuredResponse: { direction: 'up', probability: 0.6, confidence: 0.7, horizon_days: 5, evidence: [] },
+     });
+     mockRunValidate.mockRejectedValue(new SandboxTimeoutError('timed out'));
+
+@@ -161,6 +177,7 @@ describe('runSingleAgentPipeline', () => {
+           }),
+         },
+       ],
++      structuredResponse: { direction: 'up', probability: 0.6, confidence: 0.7, horizon_days: 5, evidence: [] },
+     });
+     mockRunValidate.mockRejectedValue(new ValidationFailedError('bad', 'detail'));
+
+diff --git a/harness/tests/sandbox/deepagents-adapter.test.ts b/harness/tests/sandbox/deepagents-adapter.test.ts
+index f7c104b..c8b9475 100644
+--- a/harness/tests/sandbox/deepagents-adapter.test.ts
++++ b/harness/tests/sandbox/deepagents-adapter.test.ts
+@@ -54,10 +54,69 @@ describe('SandboxBackendAdapter', () => {
+     expect(result).toEqual({ output: 'outerr', exitCode: 1, truncated: true });
+   });
+
+-  it('uploadFiles/downloadFiles return empty success arrays (no-op for this story)', async () => {
+-    const adapter = new SandboxBackendAdapter(makeMockManager(), 'run-123');
+-    await expect(adapter.uploadFiles([['a.txt', new Uint8Array()]])).resolves.toEqual([]);
+-    await expect(adapter.downloadFiles(['a.txt'])).resolves.toEqual([]);
++  it('uploadFiles base64-round-trips content through runExplore and reports success', async () => {
++    const manager = makeMockManager();
++    const adapter = new SandboxBackendAdapter(manager, 'run-123');
++
++    const result = await adapter.uploadFiles([['/workspace/a.txt', new TextEncoder().encode('hi')]]);
++
++    expect(manager.runExplore).toHaveBeenCalledWith({
++      runId: 'run-123',
++      tier: 'explore',
++      code: expect.stringContaining("base64 -d > '/workspace/a.txt'"),
++    });
++    expect(result).toEqual([{ path: '/workspace/a.txt', error: null }]);
++  });
++
++  it('uploadFiles reports invalid_path on a non-zero exit code', async () => {
++    const manager = makeMockManager();
++    (manager.runExplore as ReturnType<typeof vi.fn>).mockResolvedValue({
++      stdout: '',
++      stderr: 'no such directory',
++      stdoutTruncated: false,
++      stderrTruncated: false,
++      exitCode: 1,
++      durationMs: 5,
++    });
++    const adapter = new SandboxBackendAdapter(manager, 'run-123');
++
++    const result = await adapter.uploadFiles([['/no/such/dir/a.txt', new Uint8Array()]]);
++
++    expect(result).toEqual([{ path: '/no/such/dir/a.txt', error: 'invalid_path' }]);
++  });
++
++  it('downloadFiles base64-decodes runExplore stdout back into raw bytes', async () => {
++    const manager = makeMockManager();
++    (manager.runExplore as ReturnType<typeof vi.fn>).mockResolvedValue({
++      stdout: `${Buffer.from('hi').toString('base64')}\n`,
++      stderr: '',
++      stdoutTruncated: false,
++      stderrTruncated: false,
++      exitCode: 0,
++      durationMs: 5,
++    });
++    const adapter = new SandboxBackendAdapter(manager, 'run-123');
++
++    const result = await adapter.downloadFiles(['/workspace/a.txt']);
++
++    expect(result).toEqual([{ path: '/workspace/a.txt', content: new TextEncoder().encode('hi'), error: null }]);
++  });
++
++  it('downloadFiles reports file_not_found on a non-zero exit code', async () => {
++    const manager = makeMockManager();
++    (manager.runExplore as ReturnType<typeof vi.fn>).mockResolvedValue({
++      stdout: '',
++      stderr: 'No such file or directory',
++      stdoutTruncated: false,
++      stderrTruncated: false,
++      exitCode: 1,
++      durationMs: 5,
++    });
++    const adapter = new SandboxBackendAdapter(manager, 'run-123');
++
++    const result = await adapter.downloadFiles(['/workspace/missing.txt']);
++
++    expect(result).toEqual([{ path: '/workspace/missing.txt', content: null, error: 'file_not_found' }]);
+   });
+
+   it('dispose() delegates to manager.disposeRun with the constructed runId', async () => {
+diff --git a/harness/tests/sandbox/manager-concurrency.test.ts b/harness/tests/sandbox/manager-concurrency.test.ts
+index 6800f73..8eb70b6 100644
+--- a/harness/tests/sandbox/manager-concurrency.test.ts
++++ b/harness/tests/sandbox/manager-concurrency.test.ts
+@@ -14,6 +14,7 @@ function makeMockDocker(execDelayMs: number) {
+         },
+       };
+     }),
++    inspect: vi.fn(async () => ({ ExitCode: 0 })),
+   };
+   const fakeContainer = {
+     id: 'fake-container-id',
+diff --git a/harness/tests/sandbox/manager-timeout.test.ts b/harness/tests/sandbox/manager-timeout.test.ts
+index 361864b..0924cbf 100644
+--- a/harness/tests/sandbox/manager-timeout.test.ts
++++ b/harness/tests/sandbox/manager-timeout.test.ts
+@@ -17,6 +17,11 @@ function makeSlowMockDocker() {
+     kill: vi.fn(async () => {}),
+     remove: vi.fn(async () => {}),
+     start: vi.fn(async () => {}),
++    modem: {
++      // Registers listeners but the underlying stream's `on()` mock never fires them --
++      // simulates an exec that hangs forever, same as the real timeout scenario.
++      demuxStream: vi.fn(() => {}),
++    },
+   };
+   const fakeDocker = {
+     createContainer: vi.fn(async () => fakeContainer),
+diff --git a/harness/tests/tracing.test.ts b/harness/tests/tracing.test.ts
+index bb0f1ab..c39c059 100644
+--- a/harness/tests/tracing.test.ts
++++ b/harness/tests/tracing.test.ts
+@@ -1,6 +1,6 @@
+ import { describe, it, expect } from 'vitest';
+ import { generateTraceId } from '../src/tracing/correlation.js';
+-import { getLangfuseClient, startForecastTrace } from '../src/tracing/langfuse.js';
++import { startForecastTrace, flushTraces } from '../src/tracing/langfuse.js';
+ import type { HarnessConfig } from '../src/config.js';
+
+ describe('correlation', () => {
+@@ -25,17 +25,26 @@ describe('langfuse tracing', () => {
+     },
+   };
+
+-  it('client initializes from HarnessConfig-supplied keys', () => {
+-    const client = getLangfuseClient(config);
+-    expect(client).toBeDefined();
++  it('startForecastTrace returns a handle with a real OTel-generated trace ID', () => {
++    const trace = startForecastTrace(config, generateTraceId(), { test: true });
++    expect(typeof trace.traceId).toBe('string');
++    expect(trace.traceId.length).toBeGreaterThan(0);
++    trace.end();
+   });
+
+   it('supports a 4-level forecast_run -> debate_round -> agent_turn -> tool_call span chain', () => {
+-    const client = getLangfuseClient(config);
+-    const trace = startForecastTrace(client, generateTraceId());
++    const trace = startForecastTrace(config, generateTraceId(), { test: true });
+     const round = trace.span({ name: 'debate_round' });
+     const agentTurn = round.span({ name: 'agent_turn' });
+     const toolCall = agentTurn.span({ name: 'tool_call' });
+     expect(typeof toolCall.end).toBe('function');
++    toolCall.end();
++    agentTurn.end();
++    round.end();
++    trace.end();
++  });
++
++  it('flushTraces resolves without throwing', async () => {
++    await expect(flushTraces(config)).resolves.toBeUndefined();
+   });
+ });

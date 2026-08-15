@@ -1,0 +1,49 @@
+(node:565071) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/ts-resolve-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+--- run-real-pipeline: symbol=HINDUNILVR.NS started 2026-08-15T11:21:34.617Z | mem: rss=314MB heap=72MB/110MB external=11MB ---
+migrations: up to date | mem: rss=318MB heap=52MB/120MB external=26MB
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] run start: symbol=HINDUNILVR.NS langfuseTraceId=ddadbd5baa02cdd24b7b50792487e78b | mem: rss=318MB heap=52MB/120MB external=26MB
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] mcp: connecting to 'market' (bash -c cd /home/varunmalhotra/Desktop/Forecasting_Agent && exec uv run python -m forecasting_agent.data_server.server) | mem: rss=318MB heap=52MB/120MB external=26MB
+/home/varunmalhotra/Desktop/Forecasting_Agent/.venv/lib/python3.12/site-packages/pydantic_settings/sources/utils.py:47: IncompleteFieldDefinitionWarning: Field 'lifespan' has an incomplete definition: its annotation contains an unresolved forward reference, so settings sources may fail to correctly resolve its value. Call `model_rebuild()` on the model where the field is defined, once all the referenced types are defined.
+  warnings.warn(
+[08/15/26 16:51:35] INFO     Processing request of type            server.py:733
+                             ListToolsRequest
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] mcp: 4 tool(s) loaded: list_markets, resolve_symbol, fetch_ohlcv, fetch_option_chain | mem: rss=319MB heap=56MB/121MB external=26MB
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] agent: invoking for symbol=HINDUNILVR.NS | mem: rss=319MB heap=59MB/121MB external=26MB
+[08/15/26 16:51:37] INFO     Processing request of type            server.py:733
+                             CallToolRequest
+[*********************100%***********************]  1 of 1 completed
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.uploadFiles: start path=/workspace/bars.json bytes=21410
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.uploadFiles: done in 328ms path=/workspace/bars.json exitCode=0
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.execute: start (228 chars): python3 -c "import json; d=json.load(open('/workspace/bars.json')); print('num bars:', len(d['bars'])); print('first:',
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.execute: done in 45ms exitCode=0
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.uploadFiles: start path=/workspace/gen_model.py bytes=3297
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.uploadFiles: done in 30ms path=/workspace/gen_model.py exitCode=0
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.execute: start (37 chars): cd /workspace && python3 gen_model.py
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.execute: done in 48ms exitCode=0
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.execute: start (63 chars): cd /workspace && python3 model.py && cat /tmp/eval_request.json
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.execute: done in 46ms exitCode=0
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.execute: start (403 chars): cd /workspace && python3 -c "
+import json
+d=json.load(open('/tmp/eval_request.json'))
+for k in ['returns','forecasts','c
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.execute: done in 47ms exitCode=0
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.execute: start (663 chars): cd /workspace && python3 -c "
+import json
+d=json.load(open('/tmp/eval_request.json'))
+r=d['returns']; c=d['calls']
+# hit
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.execute: done in 44ms exitCode=0
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] agent: signal={"direction":"up","probability":0.53,"confidence":0.3,"horizon_days":10,"evidence":["Close fell ~11% from ~2345 (Apr 22) to 2077 (Aug 14) across 86 bars; 60% of daily returns were negative","August action is a tight consolidation (2063-2138) with support near 2050-2063 tested repeatedly and holding","Final smoothed forecast is slightly positive (+0.0012) and last-day call = 0.52, a mild rebound signal after oversold conditions","A large outlier down-move on 2026-07-28 (low 2016, ~9.9M volume) was followed by partial recovery, suggesting capitulation near support","Backtest caution: buy-signal hit rate (0.36) trailed the 40% base rate, so upside conviction is low"],"dissent":"The dominant multi-month trend is still down, and the walk-forward model's buy signals underperformed (hit rate 0.36 vs 0.40 base), so a continued drift lower toward 2050 is a real risk; the up-call rests mainly on mean-reversion off well-tested support rather than fresh momentum."} | mem: rss=348MB heap=63MB/131MB external=27MB
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.downloadFiles: start path=/workspace/model.py
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] adapter.downloadFiles: done in 31ms path=/workspace/model.py exitCode=0
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] sandbox: running validate tier | mem: rss=349MB heap=63MB/131MB external=27MB
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] sandbox: validate verdict=[object Object] | mem: rss=349MB heap=64MB/131MB external=27MB
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] storage: forecast + agent_signal + eval_result persisted | mem: rss=349MB heap=64MB/131MB external=27MB
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] tracing: langfuse trace ddadbd5baa02cdd24b7b50792487e78b updated | mem: rss=349MB heap=64MB/131MB external=27MB
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] sandbox: run disposed | mem: rss=349MB heap=64MB/131MB external=27MB
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] mcp: client closed | mem: rss=349MB heap=64MB/131MB external=27MB
+[21eeae3d-9685-4605-8dac-2b65632c0e0d] tracing: langfuse flushed | mem: rss=350MB heap=65MB/132MB external=28MB
+--- RESULT --- | mem: rss=350MB heap=65MB/132MB external=28MB
+--- run-real-pipeline: finished 2026-08-15T11:23:02.667Z | mem: rss=350MB heap=65MB/132MB external=28MB ---
