@@ -24,6 +24,7 @@ const config: HarnessConfig = {
     langfuse_public_key: process.env.LANGFUSE_PUBLIC_KEY!,
     langfuse_secret_key: process.env.LANGFUSE_SECRET_KEY!,
     langfuse_base_url: process.env.LANGFUSE_BASE_URL ?? 'http://localhost:3000',
+    langfuse_session_id: process.env.LANGFUSE_SESSION_ID || undefined,
   },
   sandbox: {},
   eval: {},
@@ -38,7 +39,9 @@ function memSnapshot(): string {
   return `rss=${mb(m.rss)} heap=${mb(m.heapUsed)}/${mb(m.heapTotal)} external=${mb(m.external)}`;
 }
 
-console.error(`--- run-real-pipeline: symbol=${symbol} started ${new Date().toISOString()} | mem: ${memSnapshot()} ---`);
+console.error(
+  `--- run-real-pipeline: symbol=${symbol} started ${new Date().toISOString()} | mem: ${memSnapshot()} ---`,
+);
 try {
   await runMigrations(pool, `${REPO_ROOT}/harness/src/storage/migrations`);
   console.error(`migrations: up to date | mem: ${memSnapshot()}`);

@@ -6,7 +6,12 @@
 
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
-import { startObservation, type LangfuseSpan } from '@langfuse/tracing';
+import {
+  startObservation,
+  propagateAttributes,
+  type LangfuseSpan,
+  type PropagateAttributesParams,
+} from '@langfuse/tracing';
 import { CallbackHandler } from '@langfuse/langchain';
 import { trace, context } from '@opentelemetry/api';
 import type { HarnessConfig } from '../config.js';
@@ -49,6 +54,15 @@ export class TraceHandle {
   // matching Langfuse's documented LangChain interoperability pattern.
   withActive<T>(fn: () => T): T {
     return context.with(trace.setSpan(context.active(), this.current.otelSpan), fn);
+  }
+
+  // Takes trace-level grouping attributes (name/tags/sessionId/metadata) and a function; runs fn
+  // with this span active AND those attributes propagated onto it and every span fn creates, so
+  // the whole run shows up as one named, taggable, session-scoped trace in the Langfuse UI instead
+  // of an unlabeled flat list of observations. Must wrap the entire run, not just part of it --
+  // propagateAttributes only reaches spans created after this call, per its own docs.
+  runGrouped<T>(attributes: PropagateAttributesParams, fn: () => Promise<T>): Promise<T> {
+    return this.withActive(() => propagateAttributes(attributes, fn));
   }
 }
 

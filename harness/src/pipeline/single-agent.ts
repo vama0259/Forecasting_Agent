@@ -56,6 +56,33 @@ export async function runSingleAgentPipeline({
   const langfuseHandler = getLangchainCallbackHandler(config);
   logStage(runId, `run start: symbol=${symbol} langfuseTraceId=${trace.traceId}`);
 
+  return trace.runGrouped(
+    {
+      traceName: `forecast_run:${symbol}`,
+      tags: [symbol],
+      ...(config.tracing.langfuse_session_id !== undefined && { sessionId: config.tracing.langfuse_session_id }),
+    },
+    () => runForecast({ config, pool, symbol, runId, asOf, trace, langfuseHandler }),
+  );
+}
+
+// Takes the same run inputs plus the already-started trace and callback handler; performs the
+// actual MCP connect -> agent invoke -> sandbox validate -> persist sequence inside the caller's
+// propagated trace-grouping context.
+async function runForecast({
+  config,
+  pool,
+  symbol,
+  runId,
+  asOf,
+  trace,
+  langfuseHandler,
+}: RunSingleAgentPipelineParams & {
+  runId: string;
+  asOf: Date;
+  trace: ReturnType<typeof startForecastTrace>;
+  langfuseHandler: ReturnType<typeof getLangchainCallbackHandler>;
+}): Promise<RunSingleAgentPipelineResult> {
   const serverName = config.capabilities.market_data;
   const mcpConfig = config.mcp_servers[serverName];
   if (!mcpConfig) {

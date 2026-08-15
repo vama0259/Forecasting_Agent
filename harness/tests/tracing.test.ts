@@ -47,4 +47,22 @@ describe('langfuse tracing', () => {
   it('flushTraces resolves without throwing', async () => {
     await expect(flushTraces(config)).resolves.toBeUndefined();
   });
+
+  it('runGrouped propagates traceName/tags/sessionId onto the root span', async () => {
+    const trace = startForecastTrace(config, generateTraceId(), { test: true });
+    await trace.runGrouped(
+      { traceName: 'forecast_run:TEST.NS', tags: ['TEST.NS'], sessionId: 'session-1', metadata: { symbol: 'TEST.NS' } },
+      async () => {
+        const child = trace.span({ name: 'debate_round' });
+        child.end();
+      },
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rootAttributes = (trace as any).current.otelSpan.attributes as Record<string, unknown>;
+    trace.end();
+
+    expect(rootAttributes['langfuse.trace.name']).toBe('forecast_run:TEST.NS');
+    expect(rootAttributes['langfuse.trace.tags']).toEqual(['TEST.NS']);
+    expect(rootAttributes['session.id']).toBe('session-1');
+  });
 });
