@@ -1,5 +1,9 @@
-NSE: forecasting_agent.data_server.plugins.nse
-BSE: forecasting_agent.data_server.plugins.nse
+NSE:
+  - forecasting_agent.data_server.plugins.angelone_equity
+  - forecasting_agent.data_server.plugins.nse
+BSE:
+  - forecasting_agent.data_server.plugins.angelone_equity
+  - forecasting_agent.data_server.plugins.nse
 NFO: forecasting_agent.data_server.plugins.angelone
 BFO: forecasting_agent.data_server.plugins.angelone
 CDS: forecasting_agent.data_server.plugins.angelone
