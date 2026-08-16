@@ -2,8 +2,6 @@
 import re
 from datetime import date
 
-from SmartApi import SmartConnect
-
 from forecasting_agent.data_server.contracts import OHLCVBar
 from forecasting_agent.data_server.plugins.angelone_credentials import AngelOneCredentials
 from forecasting_agent.data_server.plugins.angelone_instruments import (
@@ -14,25 +12,27 @@ from forecasting_agent.data_server.plugins.angelone_session import AngelOneSessi
 from forecasting_agent.data_server.plugins.base import MarketPlugin
 
 
+class AngelOneApiError(Exception):
+    # Raised when Angel One's API returns an explicit failure (status/success False), not a genuine empty result.
+    pass
+
+
 class AngelOnePlugin(MarketPlugin):
     # Market plugin fetching historical OHLCV data for NFO, BFO, CDS, and MCX via SmartAPI.
 
     def __init__(self, credentials: AngelOneCredentials | None = None) -> None:
-        # Initializes AngelOnePlugin with credentials, session manager, instrument master, and API client.
+        # Initializes AngelOnePlugin with credentials, session manager, and instrument master.
         self._instruments = AngelOneInstrumentMaster()
         if credentials is not None:
             self._credentials: AngelOneCredentials | None = credentials
             self._session: AngelOneSession | None = AngelOneSession(credentials)
-            self._client: SmartConnect | None = SmartConnect(api_key=credentials.api_key)
         else:
             try:
                 self._credentials = AngelOneCredentials.from_env()
                 self._session = AngelOneSession(self._credentials)
-                self._client = SmartConnect(api_key=self._credentials.api_key)
             except KeyError:
                 self._credentials = None
                 self._session = None
-                self._client = None
 
     @property
     def symbol_pattern(self) -> str:
@@ -45,13 +45,13 @@ class AngelOnePlugin(MarketPlugin):
 
     def fetch(self, symbol: str, start: date, end: date) -> list[OHLCVBar]:
         # Fetches daily OHLCV bars for the given symbol across start and end dates from Angel One.
-        if self._session is None or self._client is None:
+        if self._session is None:
             self._credentials = AngelOneCredentials.from_env()
             self._session = AngelOneSession(self._credentials)
-            self._client = SmartConnect(api_key=self._credentials.api_key)
 
         token = self._session.get_valid_token()
-        self._client.setAccessToken(token)
+        client = self._session.client
+        client.setAccessToken(token)
 
         instrument_token: str | None = None
         matched_exchange: str | None = None
@@ -67,7 +67,7 @@ class AngelOnePlugin(MarketPlugin):
             raise SymbolNotFoundError(f"Symbol '{symbol}' not found in NFO, BFO, CDS, or MCX")
 
         # Known gap: getCandleData is not routed through AngelOneSession's rate limiter.
-        response = self._client.getCandleData(
+        response = client.getCandleData(
             {
                 "exchange": matched_exchange,
                 "symboltoken": instrument_token,
@@ -77,7 +77,13 @@ class AngelOnePlugin(MarketPlugin):
             }
         )
 
-        if not response or not response.get("status") or not response.get("data"):
+        # Angel One's error responses use "success" (e.g. AG8001 Invalid Token); success responses use
+        # "status" -- verified live, the two keys are not interchangeable. An explicit False on either
+        # is a real API error and must fail loud, not be silently treated as "no data for this range".
+        if response.get("status") is False or response.get("success") is False:
+            raise AngelOneApiError(str(response.get("message", "Angel One getCandleData request failed")))
+
+        if not response or not response.get("data"):
             return []
 
         bars: list[OHLCVBar] = []

@@ -14,6 +14,17 @@ class AngelOneAuthError(Exception):
     pass
 
 
+def _strip_bearer_prefix(token: str) -> str:
+    # Takes a jwtToken string possibly prefixed with "Bearer "; returns the raw token.
+    # generateSession()'s *returned dict* bakes a "Bearer " prefix into data.jwtToken (verified live
+    # against the real API) while SmartConnect's own request code adds "Bearer " again when building
+    # the Authorization header -- storing the prefixed value produces "Bearer Bearer <token>" and a
+    # rejected request (AG8001 Invalid Token). generateToken()'s refresh response is not prefixed this
+    # way, so this strips defensively regardless of which path produced the token.
+    prefix = "Bearer "
+    return token[len(prefix) :] if token.startswith(prefix) else token
+
+
 class AngelOneSession:
     # Manages SmartAPI authentication session, token lifecycle, and request throttling.
 
@@ -40,6 +51,13 @@ class AngelOneSession:
         # Test-only helper to immediately expire the cached token.
         self._token_expiry = -1.0
 
+    @property
+    def client(self) -> SmartConnect:
+        # Returns the SmartConnect instance that logged in -- Angel One rejects tokens presented
+        # via a second, separately-constructed instance (AG8001 Invalid Token, verified live) even
+        # with an identical Authorization header, so callers must reuse this instance, not build their own.
+        return self._client
+
     def get_valid_token(self) -> str:
         # Returns a valid JWT access token, refreshing or re-authenticating if expired.
         if (
@@ -58,7 +76,7 @@ class AngelOneSession:
                     data = response.get("data")
                     jwt = data.get("jwtToken") if hasattr(data, "get") else None
                     if jwt:
-                        self._jwt_token = str(jwt)
+                        self._jwt_token = _strip_bearer_prefix(str(jwt))
                         self._token_expiry = (self._last_call_time or 0.0) + 9000.0
                         refresh = data.get("refreshToken") if hasattr(data, "get") else None
                         if refresh:
@@ -74,7 +92,7 @@ class AngelOneSession:
             msg = response.get("message", "Angel One login failed")
             raise AngelOneAuthError(str(msg))
 
-        self._jwt_token = str(response["data"]["jwtToken"])
+        self._jwt_token = _strip_bearer_prefix(str(response["data"]["jwtToken"]))
         self._refresh_token = str(response["data"]["refreshToken"])
         self._token_expiry = (self._last_call_time or 0.0) + 9000.0
         return self._jwt_token

@@ -15,6 +15,28 @@ def _login_response(jwt: str = "jwt1", refresh: str = "ref1") -> dict[str, Any]:
 
 @patch("forecasting_agent.data_server.plugins.angelone_session.pyotp.TOTP")
 @patch("forecasting_agent.data_server.plugins.angelone_session.SmartConnect")
+def test_get_valid_token_strips_bearer_prefix_from_login_response(
+    mock_sc_cls: MagicMock, mock_totp_cls: MagicMock
+) -> None:
+    # Regression test: generateSession()'s returned dict bakes "Bearer " into data.jwtToken (verified
+    # live against the real API), but SmartConnect.setAccessToken()/its own request code expects the
+    # raw token and adds "Bearer " itself -- storing the prefixed value produces a doubled prefix and
+    # a rejected request (AG8001 Invalid Token, reproduced live before this fix).
+    mock_sc = MagicMock()
+    mock_sc.generateSession.return_value = _login_response(jwt="Bearer realtoken123")
+    mock_sc_cls.return_value = mock_sc
+    mock_totp_cls.return_value.now.return_value = "123456"
+
+    from forecasting_agent.data_server.plugins.angelone_session import AngelOneSession
+
+    session = AngelOneSession(CREDS)
+    token = session.get_valid_token()
+
+    assert token == "realtoken123"
+
+
+@patch("forecasting_agent.data_server.plugins.angelone_session.pyotp.TOTP")
+@patch("forecasting_agent.data_server.plugins.angelone_session.SmartConnect")
 def test_get_valid_token_logs_in_on_first_call(mock_sc_cls: MagicMock, mock_totp_cls: MagicMock) -> None:
     mock_sc = MagicMock()
     mock_sc.generateSession.return_value = _login_response()
