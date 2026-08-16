@@ -175,10 +175,17 @@ This task is done once Steps 1-2 pass — no commit, nothing else to do. Move to
       status: str  # 'ok' | 'gap'
       detail: str | None
 
+
   class ObservationStore:
       def __init__(self, archive_dir: str = "data/archive", connection_string: str | None = None) -> None: ...
-      def write(self, source: str, observed_on: date, content: bytes | None,
-                retrieved_at: datetime | None = None, detail: str | None = None) -> None: ...
+      def write(
+          self,
+          source: str,
+          observed_on: date,
+          content: bytes | None,
+          retrieved_at: datetime | None = None,
+          detail: str | None = None,
+      ) -> None: ...
       def read(self, source: str, observed_on: date) -> bytes | None: ...
       def read_history(self, source: str, observed_on: date) -> list[ObservationRecord]: ...
   ```
@@ -250,19 +257,35 @@ def test_write_different_bytes_same_date_yields_second_row_neither_overwritten(s
 
 
 def test_read_returns_most_recent_ok_row(store: ObservationStore):
-    store.write(source="test_recency", observed_on=date(2026, 1, 7), content=b"old",
-                retrieved_at=datetime(2026, 1, 7, 9, 0, tzinfo=UTC))
-    store.write(source="test_recency", observed_on=date(2026, 1, 7), content=b"new",
-                retrieved_at=datetime(2026, 1, 7, 18, 0, tzinfo=UTC))
+    store.write(
+        source="test_recency",
+        observed_on=date(2026, 1, 7),
+        content=b"old",
+        retrieved_at=datetime(2026, 1, 7, 9, 0, tzinfo=UTC),
+    )
+    store.write(
+        source="test_recency",
+        observed_on=date(2026, 1, 7),
+        content=b"new",
+        retrieved_at=datetime(2026, 1, 7, 18, 0, tzinfo=UTC),
+    )
 
     assert store.read(source="test_recency", observed_on=date(2026, 1, 7)) == b"new"
 
 
 def test_read_history_returns_all_rows_in_retrieved_at_order(store: ObservationStore):
-    store.write(source="test_history", observed_on=date(2026, 1, 8), content=b"a",
-                retrieved_at=datetime(2026, 1, 8, 9, 0, tzinfo=UTC))
-    store.write(source="test_history", observed_on=date(2026, 1, 8), content=b"b",
-                retrieved_at=datetime(2026, 1, 8, 10, 0, tzinfo=UTC))
+    store.write(
+        source="test_history",
+        observed_on=date(2026, 1, 8),
+        content=b"a",
+        retrieved_at=datetime(2026, 1, 8, 9, 0, tzinfo=UTC),
+    )
+    store.write(
+        source="test_history",
+        observed_on=date(2026, 1, 8),
+        content=b"b",
+        retrieved_at=datetime(2026, 1, 8, 10, 0, tzinfo=UTC),
+    )
 
     history = store.read_history(source="test_history", observed_on=date(2026, 1, 8))
     assert [h.retrieved_at for h in history] == sorted(h.retrieved_at for h in history)
@@ -384,10 +407,12 @@ git commit -m "feat: add ObservationStore append-only archive writer (#19)"
       @abstractmethod
       def fetch_raw(self, observed_on: date) -> bytes: ...  # raises SourceUnavailableError on confirmed 404
 
+
   # nse_bhavcopy.py
   class NseBhavcopyDownloader(Downloader):
       def __init__(self, segment: str) -> None: ...  # segment: "CM" or "FO"
       def fetch_raw(self, observed_on: date) -> bytes: ...  # tries UDiFF URL, falls back to legacy URL on 404
+
 
   # nse_participant_oi.py
   class NseParticipantOiDownloader(Downloader):
@@ -603,7 +628,9 @@ def test_gap_is_logged_at_error_level(caplog):
     mock_downloader.fetch_raw.side_effect = SourceUnavailableError("404")
 
     with caplog.at_level(logging.ERROR):
-        run_all_downloaders(store=mock_store, downloaders={"test_source": mock_downloader}, observed_on=date(2026, 8, 15))
+        run_all_downloaders(
+            store=mock_store, downloaders={"test_source": mock_downloader}, observed_on=date(2026, 8, 15)
+        )
 
     assert any(r.levelno == logging.ERROR for r in caplog.records)
 
@@ -707,8 +734,9 @@ from forecasting_agent.data_server.contracts import OHLCVBar
 
 
 def _bar(d: date) -> OHLCVBar:
-    return OHLCVBar(date=d, open=100.0, high=105.0, low=99.0, close=103.0, volume=1000,
-                     is_outlier=False, is_circuit_locked=False)
+    return OHLCVBar(
+        date=d, open=100.0, high=105.0, low=99.0, close=103.0, volume=1000, is_outlier=False, is_circuit_locked=False
+    )
 
 
 @patch("forecasting_agent.data_server.server.ObservationStore")

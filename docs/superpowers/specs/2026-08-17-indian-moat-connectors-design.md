@@ -74,6 +74,7 @@ class FlowRecord(BaseModel):
     total_long_contracts: int = Field(ge=0)
     total_short_contracts: int = Field(ge=0)
 
+
 class DeliveryRecord(BaseModel):
     observed_on: date
     symbol: str
@@ -81,6 +82,7 @@ class DeliveryRecord(BaseModel):
     quantity_traded: int = Field(ge=0)
     deliverable_quantity: int = Field(ge=0)
     delivery_pct: float = Field(ge=0.0, le=100.0)
+
 
 class BulkDealRecord(BaseModel):
     observed_on: date
@@ -90,6 +92,7 @@ class BulkDealRecord(BaseModel):
     quantity: int = Field(ge=0)
     price: float = Field(gt=0)
 
+
 class BlockDealRecord(BaseModel):
     observed_on: date
     symbol: str
@@ -98,12 +101,14 @@ class BlockDealRecord(BaseModel):
     quantity: int = Field(ge=0)
     price: float = Field(gt=0)
 
+
 class MicrostructureResponse(BaseModel):
     observed_on: date
     delivery: list[DeliveryRecord] = Field(default_factory=list)
     bulk_deals: list[BulkDealRecord] = Field(default_factory=list)
     block_deals: list[BlockDealRecord] = Field(default_factory=list)
     coverage_note: str | None = None  # e.g. "bulk_deals: NO RECORDS reported by NSE for this date"
+
 
 class FlowsResponse(BaseModel):
     observed_on: date

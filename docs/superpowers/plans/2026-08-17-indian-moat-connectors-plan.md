@@ -95,6 +95,7 @@ def _response(status_code: int, content: bytes = b"") -> httpx.Response:
 @patch("forecasting_agent.archive.downloaders.nse_delivery_position.httpx.get")
 def test_delivery_position_200_returns_bytes(mock_get: MagicMock):
     from datetime import date
+
     fixture_bytes = (FIXTURES / "delivery_position_sample.DAT").read_bytes()
     mock_get.return_value = _response(200, fixture_bytes)
 
@@ -107,6 +108,7 @@ def test_delivery_position_200_returns_bytes(mock_get: MagicMock):
 @patch("forecasting_agent.archive.downloaders.nse_delivery_position.httpx.get")
 def test_delivery_position_404_raises_immediately(mock_get: MagicMock):
     from datetime import date
+
     mock_get.return_value = _response(404)
 
     with pytest.raises(SourceUnavailableError):
@@ -118,6 +120,7 @@ def test_delivery_position_404_raises_immediately(mock_get: MagicMock):
 @patch("forecasting_agent.archive.downloaders.nse_bulk_block_deals.httpx.get")
 def test_bulk_deals_200_with_records_returns_bytes(mock_get: MagicMock):
     from datetime import date
+
     fixture_bytes = (FIXTURES / "bulk_deals_sample.csv").read_bytes()
     mock_get.return_value = _response(200, fixture_bytes)
 
@@ -129,7 +132,11 @@ def test_bulk_deals_200_with_records_returns_bytes(mock_get: MagicMock):
 @patch("forecasting_agent.archive.downloaders.nse_bulk_block_deals.httpx.get")
 def test_block_deals_200_with_no_records_body_does_not_raise(mock_get: MagicMock):
     from datetime import date
-    mock_get.return_value = _response(200, b"Date,Symbol,Security Name,Client Name,Buy/Sell,Quantity Traded,Trade Price / Wght. Avg. Price\nNO RECORDS,,,,,,\n")
+
+    mock_get.return_value = _response(
+        200,
+        b"Date,Symbol,Security Name,Client Name,Buy/Sell,Quantity Traded,Trade Price / Wght. Avg. Price\nNO RECORDS,,,,,,\n",
+    )
 
     result = NseBulkBlockDealsDownloader().fetch_block(date(2026, 8, 14))
 
@@ -139,6 +146,7 @@ def test_block_deals_200_with_no_records_body_does_not_raise(mock_get: MagicMock
 @patch("forecasting_agent.archive.downloaders.nse_bulk_block_deals.httpx.get")
 def test_block_deals_404_raises(mock_get: MagicMock):
     from datetime import date
+
     mock_get.return_value = _response(404)
 
     with pytest.raises(SourceUnavailableError):
@@ -149,9 +157,15 @@ def test_block_deals_404_raises(mock_get: MagicMock):
 # tests/archive/test_run_daily.py -- ADD to the existing file
 def test_run_all_downloaders_covers_all_five_sources_when_called_with_the_real_default_dict():
     from forecasting_agent.archive.run_daily import _build_default_downloaders
+
     downloaders = _build_default_downloaders()
     assert set(downloaders.keys()) >= {
-        "bhavcopy_cm", "bhavcopy_fo", "participant_oi", "delivery_position", "bulk_deals", "block_deals",
+        "bhavcopy_cm",
+        "bhavcopy_fo",
+        "participant_oi",
+        "delivery_position",
+        "bulk_deals",
+        "block_deals",
     }
 ```
 
@@ -216,33 +230,54 @@ from pydantic import ValidationError
 
 def test_flow_record_rejects_negative_contracts():
     from forecasting_agent.data_server.contracts import FlowRecord
+
     with pytest.raises(ValidationError):
         FlowRecord(
-            observed_on=date(2026, 8, 14), participant="FII",
-            future_index_long=-1, future_index_short=0, future_stock_long=0, future_stock_short=0,
-            option_index_call_long=0, option_index_put_long=0, option_index_call_short=0,
-            option_index_put_short=0, option_stock_call_long=0, option_stock_put_long=0,
-            option_stock_call_short=0, option_stock_put_short=0,
-            total_long_contracts=0, total_short_contracts=0,
+            observed_on=date(2026, 8, 14),
+            participant="FII",
+            future_index_long=-1,
+            future_index_short=0,
+            future_stock_long=0,
+            future_stock_short=0,
+            option_index_call_long=0,
+            option_index_put_long=0,
+            option_index_call_short=0,
+            option_index_put_short=0,
+            option_stock_call_long=0,
+            option_stock_put_long=0,
+            option_stock_call_short=0,
+            option_stock_put_short=0,
+            total_long_contracts=0,
+            total_short_contracts=0,
         )
 
 
 def test_delivery_record_rejects_percentage_over_100():
     from forecasting_agent.data_server.contracts import DeliveryRecord
+
     with pytest.raises(ValidationError):
-        DeliveryRecord(observed_on=date(2026, 8, 14), symbol="RELIANCE", series="EQ",
-                        quantity_traded=100, deliverable_quantity=50, delivery_pct=150.0)
+        DeliveryRecord(
+            observed_on=date(2026, 8, 14),
+            symbol="RELIANCE",
+            series="EQ",
+            quantity_traded=100,
+            deliverable_quantity=50,
+            delivery_pct=150.0,
+        )
 
 
 def test_bulk_deal_record_requires_positive_price():
     from forecasting_agent.data_server.contracts import BulkDealRecord
+
     with pytest.raises(ValidationError):
-        BulkDealRecord(observed_on=date(2026, 8, 14), symbol="RELIANCE", client_name="X",
-                        buy_sell="BUY", quantity=100, price=0.0)
+        BulkDealRecord(
+            observed_on=date(2026, 8, 14), symbol="RELIANCE", client_name="X", buy_sell="BUY", quantity=100, price=0.0
+        )
 
 
 def test_microstructure_response_defaults_to_empty_lists_and_no_coverage_note():
     from forecasting_agent.data_server.contracts import MicrostructureResponse
+
     resp = MicrostructureResponse(observed_on=date(2026, 8, 14))
     assert resp.delivery == []
     assert resp.bulk_deals == []
@@ -350,6 +385,7 @@ from typing import TypeVar
 
 T = TypeVar("T")
 
+
 def filter_as_of(items: list[T], as_of: date | None, key: Callable[[T], date] = lambda b: b.date) -> list[T]:  # type: ignore[attr-defined]
     if as_of is None:
         return items
@@ -434,6 +470,7 @@ def test_registry_resolves_a_connector_from_a_temporary_manifest(tmp_path):
     manifest.write_text(f"stub: stub_connector\n")
 
     import sys
+
     sys.path.insert(0, str(tmp_path))
     try:
         registry = ConnectorRegistry(manifest_path=manifest)
@@ -620,10 +657,13 @@ def test_fetch_parses_all_three_sources_when_present(mock_store_cls):
 
     mock_store = mock_store_cls.return_value
     mock_store.read.side_effect = lambda source, observed_on: {
-        "delivery_position": delivery_fixture, "bulk_deals": bulk_fixture, "block_deals": block_fixture,
+        "delivery_position": delivery_fixture,
+        "bulk_deals": bulk_fixture,
+        "block_deals": block_fixture,
     }[source]
 
     from forecasting_agent.data_server.plugins.microstructure import MicrostructurePlugin
+
     resp = MicrostructurePlugin().fetch(date(2026, 8, 14))
 
     assert len(resp.delivery) == 1
@@ -640,6 +680,7 @@ def test_fetch_sets_coverage_note_when_a_source_was_never_archived(mock_store_cl
     mock_store.read.return_value = None
 
     from forecasting_agent.data_server.plugins.microstructure import MicrostructurePlugin
+
     resp = MicrostructurePlugin().fetch(date(2020, 1, 1))
 
     assert resp.delivery == []
@@ -724,12 +765,22 @@ def test_fetch_flows_applies_as_of_filtering(mock_get_registry):
     from forecasting_agent.data_server.server import fetch_flows
 
     record = FlowRecord(
-        observed_on=date(2026, 8, 10), participant="FII",
-        future_index_long=1, future_index_short=0, future_stock_long=0, future_stock_short=0,
-        option_index_call_long=0, option_index_put_long=0, option_index_call_short=0,
-        option_index_put_short=0, option_stock_call_long=0, option_stock_put_long=0,
-        option_stock_call_short=0, option_stock_put_short=0,
-        total_long_contracts=1, total_short_contracts=0,
+        observed_on=date(2026, 8, 10),
+        participant="FII",
+        future_index_long=1,
+        future_index_short=0,
+        future_stock_long=0,
+        future_stock_short=0,
+        option_index_call_long=0,
+        option_index_put_long=0,
+        option_index_call_short=0,
+        option_index_put_short=0,
+        option_stock_call_long=0,
+        option_stock_put_long=0,
+        option_stock_call_short=0,
+        option_stock_put_short=0,
+        total_long_contracts=1,
+        total_short_contracts=0,
     )
     mock_connector = MagicMock()
     mock_connector.fetch.return_value = [record]
