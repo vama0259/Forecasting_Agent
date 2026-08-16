@@ -1,5 +1,6 @@
-"""Market data MCP server exposing standard tool interface."""
+"""Market data MCP server exposing standard tool interface and observation archive hook."""
 
+import json
 import logging
 from datetime import date
 from typing import Any
@@ -7,11 +8,14 @@ from typing import Any
 import yfinance as yf  # type: ignore[import-untyped]
 from mcp.server.fastmcp import FastMCP
 
+from forecasting_agent.archive.errors import ArchiveWriteError
+from forecasting_agent.archive.store import ObservationStore
 from forecasting_agent.data_server.cache import ParquetCache
 from forecasting_agent.data_server.cleaner import flag_circuit_locked, hampel_clip
 from forecasting_agent.data_server.contracts import (
     FnOChainResponse,
     MarketMeta,
+    OHLCVBar,
     OHLCVResponse,
     StrikeData,
     SymbolMeta,
@@ -34,6 +38,11 @@ MARKET_METADATA: dict[str, dict[str, str]] = {
         "timezone": "Asia/Kolkata",
     },
 }
+
+
+def _serialize_bars(bars: list[OHLCVBar]) -> bytes:
+    # Serializes list of OHLCV bars to JSON bytes for archive storage.
+    return json.dumps([b.model_dump(mode="json") for b in bars]).encode("utf-8")
 
 
 @app.tool()
@@ -137,6 +146,14 @@ def fetch_ohlcv(
     # 7. Cache freshly fetched (pre-filter, cleaned+normalized) result
     if freshly_fetched:
         cache.put(symbol, market, normalized_bars)
+        try:
+            ObservationStore().write(
+                source=f"ohlcv:{market.upper()}:{symbol}",
+                observed_on=date.today(),  # noqa: DTZ011 -- matches is_stale()'s existing precedent at cache.py
+                content=_serialize_bars(normalized_bars),
+            )
+        except ArchiveWriteError:
+            logger.error("Failed to archive OHLCV snapshot for %s/%s", market, symbol, exc_info=True)
 
     # 5. Point-in-time filtering (MUST run last)
     as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
