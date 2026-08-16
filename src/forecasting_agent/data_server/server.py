@@ -12,6 +12,7 @@ from forecasting_agent.data_server.cleaner import flag_circuit_locked, hampel_cl
 from forecasting_agent.data_server.contracts import (
     FnOChainResponse,
     MarketMeta,
+    OHLCVBar,
     OHLCVResponse,
     StrikeData,
     SymbolMeta,
@@ -96,33 +97,40 @@ def fetch_ohlcv(
     # 1. Resolve plugin
     plugin = resolve(market)
 
-    # 2. Check cache; fetch from plugin only on cache miss or when stale
+    # 2. Check cache; fetch from plugin only on cache miss, when stale, or when the cached
+    # series doesn't actually cover the requested range (#36 -- a recent-window cache entry
+    # must never be served for an unrelated, older request).
     cache = ParquetCache()
+    start_date = date.fromisoformat(start) if isinstance(start, str) else start
+    end_date = date.fromisoformat(end) if isinstance(end, str) else end
+
     cached_bars = cache.get(symbol, market)
     is_cache_stale = cache.is_stale(symbol, market)
+    cache_covers_request = cache.covers_range(symbol, market, start_date, end_date)
 
     data_stale = False
     freshly_fetched = False
 
-    if cached_bars is not None and not is_cache_stale:
-        raw_bars = cached_bars
+    def _bars_in_range(bars: list[OHLCVBar]) -> list[OHLCVBar]:
+        return [b for b in bars if start_date <= b.date <= end_date]
+
+    if cached_bars is not None and not is_cache_stale and cache_covers_request:
+        raw_bars = _bars_in_range(cached_bars)
     else:
-        start_date = date.fromisoformat(start) if isinstance(start, str) else start
-        end_date = date.fromisoformat(end) if isinstance(end, str) else end
         try:
             fetched_bars = plugin.fetch(symbol, start=start_date, end=end_date)
             if fetched_bars:
-                raw_bars = fetched_bars
+                raw_bars = _bars_in_range(fetched_bars)
                 freshly_fetched = True
                 data_stale = False
-            elif cached_bars is not None:
-                raw_bars = cached_bars
+            elif cached_bars is not None and cache_covers_request:
+                raw_bars = _bars_in_range(cached_bars)
                 data_stale = True
             else:
                 raw_bars = []
         except Exception:
-            if cached_bars is not None:
-                raw_bars = cached_bars
+            if cached_bars is not None and cache_covers_request:
+                raw_bars = _bars_in_range(cached_bars)
                 data_stale = True
             else:
                 raise
