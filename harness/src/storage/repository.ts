@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import type { Forecast, DebateTrace, EvalResult, AgentSignal, DebateCheckpoint } from './types.js';
+import type { Forecast, SearchObservation, DebateTrace, EvalResult, AgentSignal, DebateCheckpoint } from './types.js';
 
+// Saves a generated forecast record with prediction payload and optional degradation status into storage.
 export async function saveForecast(pool: Pool, forecast: Forecast): Promise<void> {
   const asOf = forecast.as_of ?? forecast.asOf;
   if (!asOf) {
@@ -12,12 +13,59 @@ export async function saveForecast(pool: Pool, forecast: Forecast): Promise<void
   const createdAt = forecast.created_at ?? forecast.createdAt ?? new Date();
   const prediction =
     typeof forecast.prediction === 'string' ? forecast.prediction : JSON.stringify(forecast.prediction);
+  const degraded = forecast.degraded ?? false;
 
   await pool.query(
-    `INSERT INTO forecasts (id, symbol, horizon, prediction, confidence, created_at, as_of)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [id, forecast.symbol, forecast.horizon, prediction, forecast.confidence, createdAt, asOf],
+    `INSERT INTO forecasts (id, symbol, horizon, prediction, confidence, created_at, as_of, degraded)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [id, forecast.symbol, forecast.horizon, prediction, forecast.confidence, createdAt, asOf, degraded],
   );
+}
+
+// Persists a batch of search observation records across allowed and rejected results in a single multi-row query.
+export async function saveSearchObservations(pool: Pool, observations: SearchObservation[]): Promise<void> {
+  if (observations.length === 0) return;
+
+  const valuePlaceholders: string[] = [];
+  const params: unknown[] = [];
+  let paramIdx = 1;
+
+  for (const obs of observations) {
+    const id = obs.id ?? randomUUID();
+    const title = obs.title ?? null;
+    const url = obs.url ?? null;
+    const hostname = obs.hostname ?? null;
+    const content = obs.content ?? null;
+    const retrievedAt = obs.retrieved_at ?? new Date();
+
+    valuePlaceholders.push(
+      `($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6}, $${paramIdx + 7}, $${paramIdx + 8}, $${paramIdx + 9}, $${paramIdx + 10}, $${paramIdx + 11})`,
+    );
+    params.push(
+      id,
+      obs.forecast_run_id,
+      obs.query,
+      obs.normalized_query,
+      obs.provider,
+      obs.result_rank,
+      title,
+      url,
+      hostname,
+      obs.allowed,
+      content,
+      retrievedAt,
+    );
+    paramIdx += 12;
+  }
+
+  const query = `
+    INSERT INTO search_observations (
+      id, forecast_run_id, query, normalized_query, provider, result_rank,
+      title, url, hostname, allowed, content, retrieved_at
+    ) VALUES ${valuePlaceholders.join(', ')}
+  `;
+
+  await pool.query(query, params);
 }
 
 export async function saveDebateTrace(pool: Pool, trace: DebateTrace): Promise<void> {
