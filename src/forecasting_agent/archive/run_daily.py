@@ -1,0 +1,41 @@
+# Daily archive CLI; run post-market: uv run python -m forecasting_agent.archive.run_daily
+
+import logging
+from datetime import date
+
+from forecasting_agent.archive.downloaders.base import Downloader
+from forecasting_agent.archive.downloaders.nse_bhavcopy import NseBhavcopyDownloader
+from forecasting_agent.archive.downloaders.nse_participant_oi import NseParticipantOiDownloader
+from forecasting_agent.archive.errors import SourceUnavailableError
+from forecasting_agent.archive.store import ObservationStore
+
+logger = logging.getLogger(__name__)
+
+
+def run_all_downloaders(store: ObservationStore, downloaders: dict[str, Downloader], observed_on: date) -> None:
+    # Executes all configured downloaders for target date and archives payloads or records gaps.
+    for name, downloader in downloaders.items():
+        try:
+            content = downloader.fetch_raw(observed_on)
+            store.write(source=name, observed_on=observed_on, content=content)
+        except SourceUnavailableError as exc:
+            logger.error("Source %s unavailable on %s: %s", name, observed_on, exc)
+            store.write(source=name, observed_on=observed_on, content=None, detail=str(exc))
+        except Exception as exc:
+            logger.error("Download failed for source %s on %s: %s", name, observed_on, exc, exc_info=True)
+            store.write(source=name, observed_on=observed_on, content=None, detail=str(exc))
+
+
+def main() -> None:
+    # Invocable daily entry point configuring default downloaders and current date.
+    store = ObservationStore()
+    downloaders: dict[str, Downloader] = {
+        "bhavcopy_cm": NseBhavcopyDownloader("CM"),
+        "bhavcopy_fo": NseBhavcopyDownloader("FO"),
+        "participant_oi": NseParticipantOiDownloader(),
+    }
+    run_all_downloaders(store=store, downloaders=downloaders, observed_on=date.today())  # noqa: DTZ011
+
+
+if __name__ == "__main__":
+    main()
