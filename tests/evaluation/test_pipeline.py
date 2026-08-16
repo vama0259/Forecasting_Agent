@@ -14,13 +14,14 @@ def _request(
     as_of_offset_days: int = 3650,
     sides: list[str] | None = None,
     notional: list[float] | None = None,
+    forecasts: list[float] | None = None,
 ) -> EvalRequest:
-    """Takes a return series plus optional sides/notional; returns a coherent EvalRequest over it."""
+    """Takes a return series plus optional sides/notional/forecasts; returns a coherent EvalRequest over it."""
     n = len(returns)
     start = datetime(2025, 1, 1, tzinfo=UTC)
     return EvalRequest(
         returns=returns,
-        forecasts=[0.0] * n,
+        forecasts=forecasts if forecasts is not None else [0.0] * n,
         calls=[0.6 if r > 0 else 0.4 for r in returns],
         timestamps=[start + timedelta(days=i) for i in range(n)],
         as_of=start + timedelta(days=as_of_offset_days),
@@ -56,6 +57,32 @@ def test_scores_are_per_fold_not_one_whole_series_score() -> None:
     layer_one_folds = sorted(s.fold_number for s in result.layers if s.layer == 1)
     assert layer_one_folds == [0, 1, 2]
     assert len({s.value for s in result.layers if s.layer == 1}) > 1
+
+
+def _layer_one_means(returns: list[float], forecasts: list[float]) -> list[float | None]:
+    """Takes a return series and a forecast series; returns the per-fold layer-1 values scored over them."""
+    result = evaluate(_request(returns, forecasts=forecasts), n_splits=3, gap=2, horizon=1)
+    return [s.value for s in result.layers if s.layer == 1]
+
+
+def test_layer_one_scores_the_submitted_forecast_not_a_fixed_baseline() -> None:
+    """A perfect and a catastrophic forecast must not receive the same layer-1 score."""
+    returns = _varied(120)
+    perfect = _layer_one_means(returns, list(returns))
+    terrible = _layer_one_means(returns, [-r * 100 for r in returns])
+    assert perfect != terrible
+
+
+def test_layer_one_scores_zero_for_a_perfect_forecast() -> None:
+    returns = _varied(120)
+    assert _layer_one_means(returns, list(returns)) == [0.0, 0.0, 0.0]
+
+
+def test_layer_one_beats_zero_flag_reflects_the_submitted_forecast() -> None:
+    """beats_zero compares the model against the zero forecast, so a perfect model must set it True."""
+    returns = _varied(120)
+    result = evaluate(_request(returns, forecasts=list(returns)), n_splits=3, gap=2, horizon=1)
+    assert all(s.beats_zero for s in result.layers if s.layer == 1)
 
 
 def test_invalid_run_returns_an_evalresult_with_empty_layers_and_means() -> None:

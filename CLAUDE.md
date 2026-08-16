@@ -56,6 +56,52 @@ Before implementing any module, class, or architectural choice, document:
 
 ---
 
+## Comprehension Gate (HARD RULE — process rigor is not comprehension)
+
+Every existing gate in this file checks *process*. None of them check whether anyone
+**understood** the result. Add this one, and apply it before accepting any code that produces a
+number — a metric, score, probability, cost, latency, or count.
+
+**The responsiveness check.** Name the input that *should* drive the output. Change it. Confirm
+the output actually moves. Run it — do not reason about it, and do not accept a passing test
+suite as evidence.
+
+Claude MUST run this check itself and show the before/after values, and MUST also state the
+check in plain language so the user can answer it independently. Ask the user the question
+directly ("if X changed, should this number move?") rather than only reporting the result — the
+point is to build the user's own judgement, not to add another automated gate they trust blindly.
+
+**Why this rule exists (2026-08-17).** M8's Layer-1 MASE had: a spec reviewed to two consecutive
+`APPROVED` verdicts, a written implementation plan, 120 passing tests, a merged PR (#9), and a
+committed 50-symbol production sweep. It still scored a fixed baseline instead of the agent's
+forecast, because `pipeline.py` never read `EvalRequest.forecasts` and **every** test passed
+`forecasts=[0.0]*n`. A perfect forecast and a catastrophically wrong one produced byte-identical
+scores. No additional process would have caught it. One question would have: *"if I change the
+forecast, does the number move?"*
+
+**Corollary — delegation scales output, not understanding.** Gemini delegation, parallel
+sessions, and review loops all raise throughput. None of them raise comprehension, and
+comprehension is the current bottleneck. When the two trade off, prefer understanding one thing
+fully over shipping three things reviewed.
+
+## Standing Retro (every ~5 sessions, or when the user says "retro")
+
+Read the last ~5 `Daily/` notes plus `git log`, then report — briefly, no ceremony:
+
+1. **Deferred-work ledger.** Everything deliberately deferred, with the date and the stated
+   reason, flagged if it is aging. Deferral in this project has a poor completion record:
+   `FeatureLagAudit` was deferred 2026-08-14 with a sound justification and is still unbuilt
+   while ADR-011 lists it as part of the validity gate. Name each one; do not let a deferral
+   quietly become a decision.
+2. **Doc/code drift.** Claims in `docs/`, the vault, or `scripts/generate_pptx.py` that the code
+   does not implement. Known open instance: `generate_pptx.py:1465` asserts shipped ARIMA and
+   exponential-smoothing baselines; only a naive baseline exists.
+3. **Scope load.** Open issue count and how many parallel sessions ran. Flag when infra work has
+   run ahead of the product for several stories in a row.
+4. **One thing to improve**, stated concretely, with the evidence it is based on.
+
+---
+
 ## Full Toolkit Reference
 
 ### Installed Project Skills (use via /skill-name)
