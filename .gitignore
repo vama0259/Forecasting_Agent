@@ -12,6 +12,9 @@ coverage/
 # Data server runtime cache (ParquetCache default dir)
 /data/cache/
 
+# Point-in-time observation archive (raw bytes, keep-forever, never committed)
+/data/archive/
+
 # Logs
 logs
 *.log

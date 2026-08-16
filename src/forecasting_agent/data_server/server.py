@@ -1,5 +1,6 @@
-"""Market data MCP server exposing standard tool interface."""
+# Market data MCP server exposing standard tool interface and observation archive hook.
 
+import json
 import logging
 from datetime import date
 from typing import Any
@@ -7,11 +8,16 @@ from typing import Any
 import yfinance as yf  # type: ignore[import-untyped]
 from mcp.server.fastmcp import FastMCP
 
+from forecasting_agent.archive.errors import ArchiveWriteError
+from forecasting_agent.archive.store import ObservationStore
 from forecasting_agent.data_server.cache import ParquetCache
 from forecasting_agent.data_server.cleaner import flag_circuit_locked, hampel_clip
+from forecasting_agent.data_server.connector_registry import get_connector_registry
 from forecasting_agent.data_server.contracts import (
+    FlowsResponse,
     FnOChainResponse,
     MarketMeta,
+    MicrostructureResponse,
     OHLCVBar,
     OHLCVResponse,
     StrikeData,
@@ -37,9 +43,14 @@ MARKET_METADATA: dict[str, dict[str, str]] = {
 }
 
 
+def _serialize_bars(bars: list[OHLCVBar]) -> bytes:
+    # Serializes list of OHLCV bars to JSON bytes for archive storage.
+    return json.dumps([b.model_dump(mode="json") for b in bars]).encode("utf-8")
+
+
 @app.tool()
 def list_markets() -> list[MarketMeta]:
-    """List all supported market identifiers and metadata."""
+    # List all supported market identifiers and metadata.
     registered = get_registry().list_markets()
     markets: list[MarketMeta] = []
     for mkt in registered:
@@ -59,7 +70,7 @@ def list_markets() -> list[MarketMeta]:
 
 @app.tool()
 def resolve_symbol(symbol: str, market: str) -> SymbolMeta:
-    """Resolve a symbol within a market to its canonical symbol metadata."""
+    # Resolve a symbol within a market to its canonical symbol metadata.
     plugin = resolve(market)
 
     suffix = ""
@@ -93,7 +104,7 @@ def fetch_ohlcv(
     end: str,
     as_of: str | None = None,
 ) -> OHLCVResponse:
-    """Fetch, clean, normalize, and filter daily OHLCV bars for a symbol."""
+    # Fetch, clean, normalize, and filter daily OHLCV bars for a symbol.
     # 1. Resolve plugin
     plugin = resolve(market)
 
@@ -145,6 +156,14 @@ def fetch_ohlcv(
     # 7. Cache freshly fetched (pre-filter, cleaned+normalized) result
     if freshly_fetched:
         cache.put(symbol, market, normalized_bars)
+        try:
+            ObservationStore().write(
+                source=f"ohlcv:{market.upper()}:{symbol}",
+                observed_on=date.today(),  # noqa: DTZ011 -- matches is_stale()'s existing precedent at cache.py
+                content=_serialize_bars(normalized_bars),
+            )
+        except ArchiveWriteError:
+            logger.error("Failed to archive OHLCV snapshot for %s/%s", market, symbol, exc_info=True)
 
     # 5. Point-in-time filtering (MUST run last)
     as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
@@ -165,7 +184,7 @@ def fetch_option_chain(
     expiry: str,
     as_of: str | None = None,
 ) -> FnOChainResponse:
-    """Fetch option chain for an underlying and expiry."""
+    # Fetch option chain for an underlying and expiry.
     expiry_date = date.fromisoformat(expiry) if isinstance(expiry, str) else expiry
 
     if as_of is not None:
@@ -224,12 +243,38 @@ def fetch_option_chain(
     )
 
 
+@app.tool()
+def fetch_flows(observed_on: str, as_of: str | None = None) -> FlowsResponse:
+    # Fetch participant-wise F&O open interest flow records for a given date.
+    connector = get_connector_registry().resolve("flows")
+    obs_date = date.fromisoformat(observed_on) if isinstance(observed_on, str) else observed_on
+    records = connector.fetch(obs_date)
+    as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
+    filtered = filter_as_of(records, as_of=as_of_date, key=lambda r: r.observed_on)
+    return FlowsResponse(observed_on=obs_date, records=filtered)
+
+
+@app.tool()
+def fetch_microstructure(observed_on: str, as_of: str | None = None) -> MicrostructureResponse:
+    # Fetch delivery percentage and bulk/block deal records for a given date.
+    connector = get_connector_registry().resolve("microstructure")
+    obs_date = date.fromisoformat(observed_on) if isinstance(observed_on, str) else observed_on
+    response: MicrostructureResponse = connector.fetch(obs_date)
+    as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
+    response.delivery = filter_as_of(response.delivery, as_of=as_of_date, key=lambda r: r.observed_on)
+    response.bulk_deals = filter_as_of(response.bulk_deals, as_of=as_of_date, key=lambda r: r.observed_on)
+    response.block_deals = filter_as_of(response.block_deals, as_of=as_of_date, key=lambda r: r.observed_on)
+    return response
+
+
 if __name__ == "__main__":
     app.run()
 
 
 __all__ = [
     "app",
+    "fetch_flows",
+    "fetch_microstructure",
     "fetch_ohlcv",
     "fetch_option_chain",
     "list_markets",

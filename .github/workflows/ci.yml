@@ -10,6 +10,26 @@ jobs:
   lint-and-test:
     runs-on: ubuntu-latest
 
+    services:
+      # tests/archive/ are @pytest.mark.integration against a real Postgres (#19).
+      # Same image as the harness job so a pass here means the same thing as a pass there.
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: harness_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      STORAGE_CONNECTION_STRING: postgresql://postgres:postgres@localhost:5432/harness_test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -21,6 +41,13 @@ jobs:
 
       - name: Install dependencies
         run: uv sync
+
+      - name: Apply storage migrations
+        # The schema lives with the TypeScript migrator, but tests/archive/ needs
+        # observation_archive to exist. Applying the same .sql files keeps one source of truth
+        # rather than duplicating DDL into a Python-side fixture. Uses psycopg (already a
+        # project dependency) rather than psql, so this needs no client package on the runner.
+        run: uv run python scripts/apply_migrations.py
 
       - name: Lint with Ruff
         run: |
