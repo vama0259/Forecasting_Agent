@@ -78,6 +78,28 @@ class ParquetCache:
 
         df.to_parquet(file_path, index=False)
 
+    def covers_range(self, symbol: str, market: str, start: date, end: date) -> bool:
+        """Check whether the cached series for symbol/market fully brackets [start, end].
+
+        Args:
+            symbol: Ticker symbol (e.g. 'RELIANCE.NS').
+            market: Market identifier (e.g. 'NSE').
+            start: Requested range start (inclusive).
+            end: Requested range end (inclusive).
+
+        Returns:
+            True only if a cached series exists and its earliest bar is on or before
+            `start` and its latest bar is on or after `end` -- a cache holding a recent
+            window must not be treated as covering an unrelated, older requested range.
+        """
+        bars = self.get(symbol, market)
+        if not bars:
+            return False
+
+        cached_min = min(b.date for b in bars)
+        cached_max = max(b.date for b in bars)
+        return cached_min <= start and cached_max >= end
+
     def is_stale(
         self,
         symbol: str,

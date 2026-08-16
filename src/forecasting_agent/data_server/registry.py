@@ -9,6 +9,7 @@ from typing import Any
 import yaml  # type: ignore[import-untyped]
 
 from forecasting_agent.data_server.plugins.base import MarketPlugin
+from forecasting_agent.data_server.plugins.fallback import FallbackPlugin
 
 
 class PluginRegistry:
@@ -37,13 +38,21 @@ class PluginRegistry:
 
         for market, target in manifest.items():
             market_key = str(market).strip().upper()
-            target_str = str(target).strip()
 
-            if target_str not in module_instances:
-                plugin_instance = self._instantiate_plugin(target_str)
-                module_instances[target_str] = plugin_instance
+            if isinstance(target, list):
+                plugin_list = [self._get_or_instantiate(str(item).strip(), module_instances) for item in target]
+                self._plugins[market_key] = FallbackPlugin(plugin_list)
+            else:
+                target_str = str(target).strip()
+                self._plugins[market_key] = self._get_or_instantiate(target_str, module_instances)
 
-            self._plugins[market_key] = module_instances[target_str]
+    def _get_or_instantiate(self, target: str, module_instances: dict[str, MarketPlugin]) -> MarketPlugin:
+        # Returns the cached plugin instance for this target string, instantiating and caching it
+        # on first use -- shared across every market key (string- or list-valued) that names it, so
+        # e.g. NSE and BSE both listing angelone_equity as primary share one login, not two.
+        if target not in module_instances:
+            module_instances[target] = self._instantiate_plugin(target)
+        return module_instances[target]
 
     def _instantiate_plugin(self, target: str) -> MarketPlugin:
         if ":" in target:
