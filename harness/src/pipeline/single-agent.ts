@@ -88,7 +88,8 @@ async function runForecast({
   if (!mcpConfig) {
     throw new Error(`MCP server configuration missing for capability 'market_data' (${serverName})`);
   }
-  logStage(runId, `mcp: connecting to '${serverName}' (${mcpConfig.command} ${mcpConfig.args.join(' ')})`);
+  const mcpTarget = 'command' in mcpConfig ? `${mcpConfig.command} ${mcpConfig.args.join(' ')}` : mcpConfig.url;
+  logStage(runId, `mcp: connecting to '${serverName}' (${mcpTarget})`);
   const mcpClient = new MultiServerMCPClient({ [serverName]: mcpConfig });
   const tools = await mcpClient.getTools();
   logStage(runId, `mcp: ${tools.length} tool(s) loaded: ${tools.map((t) => t.name).join(', ')}`);

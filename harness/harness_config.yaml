@@ -4,13 +4,18 @@ llm:
   api_key: ${LLM_API_KEY}
 
 mcp_servers:
+  anysearch:
+    transport: http
+    url: https://api.anysearch.com/mcp
+    headers:
+      Authorization: "Bearer ${ANYSEARCH_API_KEY}"
   market:
     command: uv
     args: ["run", "--directory", "..", "python", "-m", "forecasting_agent.data_server.server"]
 
 capabilities:
   chat: llm
-  search: llm
+  search: anysearch
   sentiment: llm
   market_data: market
 
@@ -21,6 +26,22 @@ tracing:
   langfuse_public_key: ${LANGFUSE_PUBLIC_KEY}
   langfuse_secret_key: ${LANGFUSE_SECRET_KEY}
   langfuse_base_url: ${LANGFUSE_BASE_URL}
+
+redis:
+  url: ${REDIS_URL}
+
+search:
+  initial_run_budget: 20
+  daily_cap: 2000
+  run_ttl_seconds: 21600
+  provider_timeout_ms: 15000
+  max_results: 10
+  allowed_domains:
+    - moneycontrol.com
+    - economictimes.indiatimes.com
+    - livemint.com
+    - bseindia.com
+    - nseindia.com
 
 sandbox: {}
 eval: {}
