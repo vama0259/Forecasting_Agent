@@ -17,6 +17,9 @@ import { startForecastTrace, flushTraces, getLangchainCallbackHandler } from '..
 import { invokeAgentTurn } from './agent-turn.js';
 import type { HarnessConfig } from '../config.js';
 import type { AgentSignal as AgentSignalRow, EvalResult as EvalResultRow } from '../storage/types.js';
+import type { StructuredTool } from '@langchain/core/tools';
+import { buildSearchTool } from '../search/tool.js';
+import type { SearchCapability, SearchRunLifecycle } from '../search/types.js';
 
 // Takes nothing; returns the current process's RSS/heap footprint as a short log-friendly string.
 function memSnapshot(): string {
@@ -36,6 +39,7 @@ export interface RunSingleAgentPipelineParams {
   config: HarnessConfig;
   pool: Pool;
   symbol: string;
+  search?: (SearchCapability & SearchRunLifecycle) | undefined;
 }
 
 // Result returned after a successful single-agent forecasting run.
@@ -44,11 +48,12 @@ export interface RunSingleAgentPipelineResult {
   evalResult: SandboxEvalResult;
 }
 
-// Takes config, Postgres pool, and symbol; executes, validates, persists, and traces one price-anchor forecast run.
+// Takes config, Postgres pool, symbol, and optional search capability; executes and traces one forecast run.
 export async function runSingleAgentPipeline({
   config,
   pool,
   symbol,
+  search,
 }: RunSingleAgentPipelineParams): Promise<RunSingleAgentPipelineResult> {
   const runId = randomUUID();
   const asOf = new Date();
@@ -62,17 +67,16 @@ export async function runSingleAgentPipeline({
       tags: [symbol],
       ...(config.tracing.langfuse_session_id !== undefined && { sessionId: config.tracing.langfuse_session_id }),
     },
-    () => runForecast({ config, pool, symbol, runId, asOf, trace, langfuseHandler }),
+    () => runForecast({ config, pool, symbol, search, runId, asOf, trace, langfuseHandler }),
   );
 }
 
-// Takes the same run inputs plus the already-started trace and callback handler; performs the
-// actual MCP connect -> agent invoke -> sandbox validate -> persist sequence inside the caller's
-// propagated trace-grouping context.
+// Takes run inputs and trace handles; connects market data, claims search budget, runs agent, and records metrics.
 async function runForecast({
   config,
   pool,
   symbol,
+  search,
   runId,
   asOf,
   trace,
@@ -91,8 +95,28 @@ async function runForecast({
   const mcpTarget = 'command' in mcpConfig ? `${mcpConfig.command} ${mcpConfig.args.join(' ')}` : mcpConfig.url;
   logStage(runId, `mcp: connecting to '${serverName}' (${mcpTarget})`);
   const mcpClient = new MultiServerMCPClient({ [serverName]: mcpConfig });
-  const tools = await mcpClient.getTools();
+  const tools: StructuredTool[] = await mcpClient.getTools();
   logStage(runId, `mcp: ${tools.length} tool(s) loaded: ${tools.map((t) => t.name).join(', ')}`);
+
+  let searchDegraded = false;
+  let granted = 0;
+  if (search) {
+    granted = await search.beginRun(runId);
+    logStage(runId, `search: budget granted=${granted}`);
+    const searchTool = buildSearchTool(
+      {
+        search: async (rId: string, q: string) => {
+          const outcome = await search.search(rId, q);
+          if (outcome.degraded) {
+            searchDegraded = true;
+          }
+          return outcome;
+        },
+      },
+      runId,
+    );
+    tools.push(searchTool);
+  }
 
   const sandboxManager = new SandboxManager();
   const adapter = new SandboxBackendAdapter(sandboxManager, runId);
@@ -149,6 +173,7 @@ async function runForecast({
       prediction: signal,
       confidence: signal.confidence,
       as_of: asOf,
+      degraded: searchDegraded,
     });
     await saveAgentSignal(pool, forecastRow);
     await saveEvalResult(pool, evalResult as unknown as EvalResultRow);
@@ -160,14 +185,24 @@ async function runForecast({
   } finally {
     await adapter.dispose();
     logStage(runId, 'sandbox: run disposed');
-    // Without this the MCP server's child process (and its stdio pipes) stays alive after the
-    // pipeline returns, so a short-lived CLI run never actually exits the Node event loop.
     await mcpClient.close();
     logStage(runId, 'mcp: client closed');
+    let refunded = 0;
+    if (search) {
+      refunded = await search.endRun(runId);
+      logStage(runId, `search: budget refunded=${refunded}`);
+    }
+    const spent = granted - refunded;
+    trace.update({
+      metadata: {
+        symbol,
+        runId,
+        search_granted: granted,
+        search_spent: spent,
+        search_degraded: searchDegraded,
+      },
+    });
     trace.end();
-    // OTel spans export on end(), but the span processor batches its own network sends -- a
-    // short-lived CLI run can exit before that batch timer ever fires. Flush explicitly here
-    // so every run, success or failure, actually reaches Langfuse before the process exits.
     await flushTraces(config);
     logStage(runId, 'tracing: langfuse flushed');
   }
