@@ -57,3 +57,17 @@ def test_one_downloader_failing_does_not_block_the_others():
     )
 
     assert mock_store.write.call_count == 2
+
+
+def test_run_all_downloaders_covers_all_five_sources_when_called_with_the_real_default_dict():
+    from forecasting_agent.archive.run_daily import _build_default_downloaders
+
+    downloaders = _build_default_downloaders()
+    assert set(downloaders.keys()) >= {
+        "bhavcopy_cm",
+        "bhavcopy_fo",
+        "participant_oi",
+        "delivery_position",
+        "bulk_deals",
+        "block_deals",
+    }

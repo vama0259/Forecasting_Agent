@@ -8,6 +8,8 @@ import httpx
 import pytest
 
 from forecasting_agent.archive.downloaders.nse_bhavcopy import NseBhavcopyDownloader
+from forecasting_agent.archive.downloaders.nse_bulk_block_deals import NseBulkBlockDealsDownloader
+from forecasting_agent.archive.downloaders.nse_delivery_position import NseDeliveryPositionDownloader
 from forecasting_agent.archive.downloaders.nse_participant_oi import NseParticipantOiDownloader
 from forecasting_agent.archive.errors import SourceUnavailableError
 
@@ -73,3 +75,65 @@ def test_bhavcopy_udiff_200_does_not_try_legacy(mock_get: MagicMock):
 
     assert result == fixture_bytes
     assert mock_get.call_count == 1
+
+
+@patch("forecasting_agent.archive.downloaders.nse_delivery_position.httpx.get")
+def test_delivery_position_200_returns_bytes(mock_get: MagicMock):
+    from datetime import date
+
+    fixture_bytes = (FIXTURES / "delivery_position_sample.DAT").read_bytes()
+    mock_get.return_value = _response(200, fixture_bytes)
+
+    result = NseDeliveryPositionDownloader().fetch_raw(date(2026, 8, 14))
+
+    assert result == fixture_bytes
+    assert mock_get.call_count == 1
+
+
+@patch("forecasting_agent.archive.downloaders.nse_delivery_position.httpx.get")
+def test_delivery_position_404_raises_immediately(mock_get: MagicMock):
+    from datetime import date
+
+    mock_get.return_value = _response(404)
+
+    with pytest.raises(SourceUnavailableError):
+        NseDeliveryPositionDownloader().fetch_raw(date(2026, 8, 15))
+
+    assert mock_get.call_count == 1
+
+
+@patch("forecasting_agent.archive.downloaders.nse_bulk_block_deals.httpx.get")
+def test_bulk_deals_200_with_records_returns_bytes(mock_get: MagicMock):
+    from datetime import date
+
+    fixture_bytes = (FIXTURES / "bulk_deals_sample.csv").read_bytes()
+    mock_get.return_value = _response(200, fixture_bytes)
+
+    result = NseBulkBlockDealsDownloader().fetch_bulk(date(2026, 8, 14))
+
+    assert result == fixture_bytes
+
+
+@patch("forecasting_agent.archive.downloaders.nse_bulk_block_deals.httpx.get")
+def test_block_deals_200_with_no_records_body_does_not_raise(mock_get: MagicMock):
+    from datetime import date
+
+    mock_get.return_value = _response(
+        200,
+        b"Date,Symbol,Security Name,Client Name,Buy/Sell,Quantity Traded,"
+        b"Trade Price / Wght. Avg. Price\nNO RECORDS,,,,,,\n",
+    )
+
+    result = NseBulkBlockDealsDownloader().fetch_block(date(2026, 8, 14))
+
+    assert b"NO RECORDS" in result
+
+
+@patch("forecasting_agent.archive.downloaders.nse_bulk_block_deals.httpx.get")
+def test_block_deals_404_raises(mock_get: MagicMock):
+    from datetime import date
+
+    mock_get.return_value = _response(404)
+
+    with pytest.raises(SourceUnavailableError):
+        NseBulkBlockDealsDownloader().fetch_block(date(2026, 8, 14))
