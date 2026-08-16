@@ -85,7 +85,8 @@ harness/src/search/
   provider.ts         -- AnySearchProvider: MCP tools/call -> parse -> SearchResult[]; implements CapabilityProvider.healthCheck
   budget.ts           -- SearchBudgetLedger: claim / spend / release, Redis + Lua
   cache.ts            -- RunScopedSearchCache: normalise -> Redis get/set, run-scoped TTL
-  capability.ts       -- AnySearchCapability: composes the five below; implements SearchCapability (agents) + SearchRunLifecycle (pipeline)
+  capability.ts       -- AnySearchCapability: composes the six below; implements SearchCapability (agents) + SearchRunLifecycle (pipeline)
+  tool.ts             -- buildSearchTool(capability, runId): the metered StructuredTool the LLM sees (§3a)
   redis.ts            -- createRedisClient(config): ioredis factory + graceful close
 harness/src/storage/
   migrations/004_search_observations.sql
@@ -105,13 +106,14 @@ import { Redis } from 'ioredis' -> tsc --noEmit exit 0 under the harness's exact
 
 This is the kind of detail that costs an implementation round if the spec asserts the package name and stops there.
 
-**Composition, not inheritance.** `AnySearchCapability` owns five collaborators and coordinates them; none of them know about each other. Each is independently testable with no Redis, no network, and no Docker:
+**Composition, not inheritance.** `AnySearchCapability` owns six collaborators and coordinates them; none of them know about each other. The first two are pure and need no infrastructure at all to test:
 
 - `AnySearchResultParser` — bytes in, `SearchResult[]` out. Pure.
 - `DomainAllowlist` — `SearchResult[]` in, partitioned out. Pure.
 - `SearchBudgetLedger` — Redis only. Knows nothing about search.
 - `RunScopedSearchCache` — Redis only. Knows nothing about budgets.
 - `AnySearchProvider` — MCP only. Knows nothing about budgets or caching.
+- the storage `Pool` — passed to `saveSearchObservations` at §4 step 7. Listed explicitly because an earlier draft of this spec said "five collaborators" while §4 called a repository function, and an unlisted dependency is one an implementer has to invent a source for.
 
 This is the Dependency Inversion point ADR-015 requires: agents receive a `SearchCapability` typed against the `search` capability name and never learn the provider's identity.
 
@@ -184,6 +186,33 @@ Verified: returns `0` and creates nothing on a missing key; returns `1`, sets th
 
 **The set is cleared in `endRun`**, alongside the ledger release — which is exactly why both live behind one method (§3). Without the delete the harness accumulates every run id it has ever degraded for the lifetime of the process, unbounded in the long-running configuration this eventually ships as. A backstop that leaks is a bug wearing a safety net's clothes.
 
+## 3a. How the agent actually reaches it — the metered tool wrapper
+
+`SearchCapability` is a plain object. Agents in this codebase do not consume objects; `buildPriceAnchorAgent({ tools })` takes `StructuredTool[]`, and `single-agent.ts` fills that array from `mcpClient.getTools()`. Nothing in §3 is reachable by an LLM until it is a tool. This is the seam where the whole design succeeds or is silently bypassed, so it is specified rather than left implied.
+
+```ts
+// harness/src/search/tool.ts
+export function buildSearchTool(capability: SearchCapability, runId: string): StructuredTool {
+  return tool(
+    async ({ query }) => JSON.stringify(await capability.search(runId, query)),
+    {
+      name: 'search_news',
+      description: 'Search recent Indian financial news. Returns results from approved financial portals only.',
+      schema: z.object({ query: z.string().min(1).describe('One search intent, in natural language.') }),
+    },
+  );
+}
+```
+
+Verified: `tool()` from `@langchain/core/tools` returns a `DynamicStructuredTool`, which is a `StructuredTool` — the exact type `buildPriceAnchorAgent` accepts.
+
+Two rules follow, and both are load-bearing:
+
+1. **The raw AnySearch MCP tools never enter the agent's tool array.** `single-agent.ts` currently does `tools = await mcpClient.getTools()` for the market-data server and passes the lot. If the AnySearch server were connected the same way, the LLM would receive the provider's own unmetered `search` alongside our wrapper and could call either. The search server is therefore connected only *inside* `AnySearchProvider`, never through the pipeline's general tool-collection path.
+2. **`runId` is bound at construction, not passed by the model.** If `forecast_run_id` were a tool parameter, an LLM could supply another run's id and spend its budget — an unlikely accident and a trivial exploit, and either way the accounting unit stops being trustworthy. Closing it over the run makes the wrong value unrepresentable rather than merely discouraged.
+
+This also keeps the agent's prompt surface honest: the model sees one tool called `search_news`, not four provider tools plus a budget concept it has no business reasoning about.
+
 ## 4. Data flow
 
 `isDegraded(runId)` below is shorthand for the combined check of §3 — `await ledger.isDegraded(runId) || localDegraded.has(runId)` — never the Redis field alone.
@@ -234,12 +263,17 @@ ToolException: Error calling tool search: McpError: MCP error -32001: TimeoutErr
 
 ## 5. Budget ledger — Redis keys and atomicity
 
-One hash per run and one counter per IST day:
+Three key shapes — one hash per run, one counter per IST day, and one cache entry per distinct query within a run:
 
-| Key | Type | Fields | TTL |
+| Key | Type | Contents | TTL |
 |---|---|---|---|
 | `search:run:{forecast_run_id}` | hash | `granted`, `remaining`, `degraded` | `run_ttl_seconds` (default 21600 = 6h) |
 | `search:quota:{YYYY-MM-DD}` | string | integer count of units **allocated and not yet returned** | `EXPIREAT` next IST midnight + 1h grace |
+| `search:cache:{forecast_run_id}:{sha256(normalised_query)}` | string | JSON array of the allowlist-**filtered** results | `run_ttl_seconds` |
+
+The cache key hashes the normalised query rather than embedding it. An agent-authored query is unbounded text and may contain spaces, newlines, or colons — all legal in a Redis key but hostile to `KEYS`-style debugging and to the key-shape convention above, and an unbounded key wastes memory proportional to the query. A fixed-width SHA-256 is one line and removes the whole class of concern. Collisions are not a practical consideration at this cardinality.
+
+Storing the **filtered** set, not the raw set, is what makes the cache honour ADR-017's reproducibility goal: a later hit within the run returns byte-identical results to the first call, including the allowlist's verdict. Caching pre-filter results and re-filtering on read would let a config reload mid-run change what a "cached" result contains.
 
 **What the daily key actually bounds, stated precisely because "2,000/day cap" is misleading on its own.** It counts *outstanding allocations plus settled spend*, not raw searches issued. While a run is live its full grant is debited even if it has spent 3 of 20; the remainder is credited back at `release`. Two consequences the operator needs to know:
 
@@ -480,6 +514,9 @@ Closing it means egress filtering — a custom Docker network plus an allowlisti
 - *Degradation survives a lost run key* — degrade a run, `DEL` its run key, then search again: the outcome still reports `degraded: true` via the process-local backstop, and the forecast persists as degraded. Asserting only the Redis field here would pass while the real hole stayed open.
 - *`endRun` tears down both stores* — after `endRun`, `EXISTS search:run:{id}` is `0` **and** a subsequent `search` on the same id reports `degraded: false`. Asserting only the Redis side would let the in-process set leak undetected, which is the defect this test exists for.
 
+- *The agent's tool array contains the wrapper and none of the provider's tools* — build the pipeline's tool list with the search server configured, then assert exactly one search-related tool is present and it is `search_news`. This is the regression test for §3a rule 1; without it, a future refactor that routes AnySearch through `mcpClient.getTools()` restores unmetered access silently and every other test still passes.
+- *`runId` is not a tool parameter* — the wrapper's JSON schema exposes only `query`, so a model cannot address another run's budget (§3a rule 2).
+
 **Type-level (compile-time, part of `pnpm typecheck`):**
 - The ISP boundary holds — a `SearchCapability`-typed reference cannot reach `beginRun`, pinned with `@ts-expect-error`. If the split ever collapses, that directive becomes an unused-expect-error and the typecheck fails, which is the whole point of asserting it this way rather than in prose.
 
@@ -494,6 +531,8 @@ claim(run, 20) -> search("...") -> real MCP call -> parse -> filter -> persist
               -> drain to 0 (asserts degraded, run completes)
               -> release (asserts daily counter restored)
 ```
+**This one test is opt-in, gated on `RUN_LIVE_SEARCH_E2E=1`, and is the only test in the suite that touches the live provider.** Every other test above uses real Redis and real Postgres but a stubbed provider. The reason is not flakiness — it is that `pnpm test` runs vitest over everything, so an ungated live smoke would spend real AnySearch quota on every local test run and every CI job, against the same 2,000/day ceiling this entire story exists to protect. A test suite that drains the budget it is testing is a self-defeating design, and it would do so silently, since the spend lands in the daily counter exactly like production spend. Gating it also keeps the suite runnable offline, which the rest of the tests already are.
+
 Explicitly **harness-level, not a forecast run.** The pipeline is still single-agent price-anchor; there is no sentiment agent and no debate, so "every debate round sees identical results" has no debate to exercise. The cache's round-stability property is proven by the repeat-query assertion, and the plan says so rather than dressing a harness exercise as an integration test it is not.
 
 ## 13. Deliberately deferred
@@ -543,5 +582,8 @@ Everything in this spec that could be run, was run, on 2026-08-16/17 against rea
 | **Round 5:** the ISP split compiles and actually segregates | `tsc --noEmit`, one class implementing both interfaces, registered on the real registry | Clean, **including** the `@ts-expect-error` on `forAgent.beginRun` — so the boundary is enforced by the compiler, not by convention |
 | **Round 8:** do the new config keys and env names collide? | `grep` over the repo and `harness_config.yaml`'s top-level keys | No collisions — `search:`/`redis:` free, `REDIS_URL`/`ANYSEARCH*` unreferenced |
 | **Round 8:** does `.env.example` exist to append to? | `git ls-tree` across `main`, `dev`, `feat/issue-30-…` | **Only on #30's branch** — cross-branch coupling, §9 |
+| **Round 9:** does `pnpm test` run everything by default? | `package.json` scripts + the `storage-integration.test.ts` precedent | Yes, `vitest run` with no tagging — so the live-provider smoke must be env-gated or the suite spends real quota (§12) |
+| **Round 10:** does `describe.skipIf` actually gate on an env var? | Real vitest 4.1.10 run, gated block containing a deliberately failing assertion | `1 passed \| 1 skipped` — the failing test never ran, so the gate is proven, not assumed |
+| **Round 11:** can an agent even reach a `SearchCapability`? | Read `price-anchor.ts` + `@langchain/core` tool types | **No** — agents take `StructuredTool[]`. `tool()` returns `DynamicStructuredTool extends StructuredTool`, so a wrapper is required; §3a added |
 
 The dev database was returned to its exact prior state after the migration probe (`search_observations` dropped, `forecasts.degraded` dropped, test rows deleted; 8 tables and 7 forecast columns confirmed restored).
