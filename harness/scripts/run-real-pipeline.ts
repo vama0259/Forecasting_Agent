@@ -1,6 +1,8 @@
 // Manual driver: runs runSingleAgentPipeline against real DeepSeek, real market-data MCP server,
 // real Docker sandbox, and real Postgres for one symbol. Not part of `pnpm test` (lives outside
-// tests/, vitest's glob never sees it). Run with: node --experimental-strip-types scripts/run-real-pipeline.ts <SYMBOL>
+// tests/, vitest's glob never sees it). Run with: pnpm exec tsx --env-file=.env scripts/run-real-pipeline.ts <SYMBOL>
+// (plain `node --experimental-strip-types` can't resolve the .js-suffixed imports back to their
+// .ts sources -- Node's type-stripping doesn't do that remapping, only tsx/ts-node do.)
 
 import { join } from 'node:path';
 import { Pool } from 'pg';

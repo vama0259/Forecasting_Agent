@@ -7,7 +7,7 @@ import numpy as np
 from forecasting_agent.evaluation.brier import brier, calibration_bins
 from forecasting_agent.evaluation.fees import IndianFeeSchedule
 from forecasting_agent.evaluation.gate import run_gate
-from forecasting_agent.evaluation.mase import mase, naive_forecast, zero_forecast_mase
+from forecasting_agent.evaluation.mase import mase, zero_forecast_mase
 from forecasting_agent.evaluation.sortino import cost_adjusted_period_returns, sortino
 from forecasting_agent.evaluation.types import EvalRequest, EvalResult, LayerMean, LayerScore
 from forecasting_agent.evaluation.walk_forward import PurgedWalkForward
@@ -29,6 +29,7 @@ def evaluate(
         return EvalResult(verdict=verdict, layers=[], layer_means={})
 
     returns_arr = np.asarray(request.returns, dtype=np.float64)
+    forecasts_arr = np.asarray(request.forecasts, dtype=np.float64)
     calls_arr = np.asarray(request.calls, dtype=np.float64)
     notional_arr = np.asarray(request.position_notional, dtype=np.float64)
     schedule = IndianFeeSchedule()
@@ -41,8 +42,8 @@ def evaluate(
         y_train = returns_arr[train_idx]
         y_test = returns_arr[test_idx]
 
-        l1_naive = naive_forecast(y_train, y_test)
-        l1_val = mase(y_train, y_test, l1_naive)
+        l1_forecast = forecasts_arr[test_idx]
+        l1_val = mase(y_train, y_test, l1_forecast)
         l1_zero = zero_forecast_mase(y_train, y_test)
         l1_beats_zero = l1_val < l1_zero
         layers.append(
