@@ -2,33 +2,17 @@
 // real Docker sandbox, and real Postgres for one symbol. Not part of `pnpm test` (lives outside
 // tests/, vitest's glob never sees it). Run with: node --experimental-strip-types scripts/run-real-pipeline.ts <SYMBOL>
 
+import { join } from 'node:path';
 import { Pool } from 'pg';
+import { loadConfig } from '../src/config-loader.js';
 import { runMigrations } from '../src/storage/migrator.js';
 import { runSingleAgentPipeline } from '../src/pipeline/single-agent.js';
-import type { HarnessConfig } from '../src/config.js';
 
-const REPO_ROOT = '/home/varunmalhotra/Desktop/Forecasting_Agent';
+const REPO_ROOT = process.env.REPO_ROOT ?? '/home/varunmalhotra/Desktop/Forecasting_Agent';
+process.env.REPO_ROOT = REPO_ROOT;
 const symbol = process.argv[2] ?? 'RELIANCE.NS';
 
-const config: HarnessConfig = {
-  llm: { provider: 'deepseek', model: process.env.LLM_MODEL ?? 'deepseek-chat', api_key: process.env.LLM_API_KEY! },
-  mcp_servers: {
-    market: {
-      command: 'bash',
-      args: ['-c', `cd ${REPO_ROOT} && exec uv run python -m forecasting_agent.data_server.server`],
-    },
-  },
-  capabilities: { chat: 'llm', search: 'llm', sentiment: 'llm', market_data: 'market' },
-  storage: { connection_string: process.env.STORAGE_CONNECTION_STRING! },
-  tracing: {
-    langfuse_public_key: process.env.LANGFUSE_PUBLIC_KEY!,
-    langfuse_secret_key: process.env.LANGFUSE_SECRET_KEY!,
-    langfuse_base_url: process.env.LANGFUSE_BASE_URL ?? 'http://localhost:3000',
-    langfuse_session_id: process.env.LANGFUSE_SESSION_ID || undefined,
-  },
-  sandbox: {},
-  eval: {},
-};
+const config = loadConfig(join(import.meta.dirname, '..', 'harness_config.yaml'));
 
 const pool = new Pool({ connectionString: config.storage.connection_string });
 

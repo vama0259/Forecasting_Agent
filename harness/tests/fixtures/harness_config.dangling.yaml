@@ -15,7 +15,7 @@ mcp_servers:
 
 capabilities:
   chat: llm
-  search: anysearch
+  search: nonexistent_search_server
   sentiment: llm
   market_data: market
 
