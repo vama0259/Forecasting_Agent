@@ -33,3 +33,23 @@ forbidden_modules =
     forecasting_agent.archive.store
     forecasting_agent.archive.downloaders.nse_bhavcopy
     forecasting_agent.data_server
+
+[importlinter:contract:connector-flows-isolation]
+name = Flows connector isolation
+type = forbidden
+source_modules =
+    forecasting_agent.data_server.plugins.flows
+forbidden_modules =
+    forecasting_agent.archive.downloaders
+    forecasting_agent.data_server.plugins.microstructure
+    forecasting_agent.data_server.registry
+
+[importlinter:contract:connector-microstructure-isolation]
+name = Microstructure connector isolation
+type = forbidden
+source_modules =
+    forecasting_agent.data_server.plugins.microstructure
+forbidden_modules =
+    forecasting_agent.archive.downloaders
+    forecasting_agent.data_server.plugins.flows
+    forecasting_agent.data_server.registry
