@@ -49,3 +49,12 @@ def test_archive_derived_plugin_is_abstract_with_one_method():
 
     instance = Concrete()
     assert instance.fetch(date(2026, 8, 14)) == []
+
+
+def test_registry_resolves_flows_and_microstructure_from_the_real_manifest():
+    from forecasting_agent.data_server.connector_registry import ConnectorRegistry
+
+    registry = ConnectorRegistry()
+
+    assert registry.resolve("flows") is not None
+    assert registry.resolve("microstructure") is not None
