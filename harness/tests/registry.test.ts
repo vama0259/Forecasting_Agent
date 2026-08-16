@@ -6,7 +6,10 @@ import { createMockMarketData, createMockProvider } from './helpers.js';
 function fullyRegistered(): CapabilityRegistry {
   const registry = new CapabilityRegistry();
   registry.register('chat', createMockProvider('ok'));
-  registry.register('search', createMockProvider('ok'));
+  registry.register('search', {
+    ...createMockProvider('ok'),
+    search: async () => ({ results: [], source: 'degraded', degraded: true }),
+  });
   registry.register('sentiment', createMockProvider('skip'));
   registry.register('market_data', createMockMarketData());
   return registry;
@@ -67,7 +70,10 @@ describe('validateAll', () => {
   it('aggregates every failure into one CapabilityHealthError', async () => {
     const registry = new CapabilityRegistry();
     registry.register('chat', createMockProvider('fail', 'ECONNREFUSED'));
-    registry.register('search', createMockProvider('ok'));
+    registry.register('search', {
+      ...createMockProvider('ok'),
+      search: async () => ({ results: [], source: 'degraded', degraded: true }),
+    });
     registry.register('sentiment', createMockProvider('fail', 'ETIMEDOUT'));
     registry.register('market_data', createMockMarketData());
     const error = await registry.validateAll().then(

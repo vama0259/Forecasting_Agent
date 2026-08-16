@@ -36,6 +36,11 @@ tracing:
   langfuse_public_key: pk-test
   langfuse_secret_key: sk-test
   langfuse_base_url: http://localhost:3000
+redis:
+  url: redis://localhost:6379
+search:
+  allowed_domains:
+    - moneycontrol.com
 `;
 
 beforeEach(() => {
@@ -52,7 +57,7 @@ describe('loadConfig', () => {
     const config = loadConfig(writeConfig(VALID));
     expect(config.llm.api_key).toBe('sk-live-123');
     expect(config.capabilities.market_data).toBe('market');
-    expect(config.mcp_servers['market']?.command).toBe('node');
+    expect(config.mcp_servers['market']).toMatchObject({ command: 'node' });
   });
 
   it('defaults the placeholder sandbox and eval sections to empty records', () => {
@@ -134,6 +139,6 @@ describe('loadConfig', () => {
     vi.stubEnv('ARG_ONE', 'server.js');
     const withArg = VALID.replace('args: ["server.js"]', 'args: ["${ARG_ONE}"]');
     const config = loadConfig(writeConfig(withArg));
-    expect(config.mcp_servers['market']?.args).toEqual(['server.js']);
+    expect(config.mcp_servers['market']).toMatchObject({ args: ['server.js'] });
   });
 });

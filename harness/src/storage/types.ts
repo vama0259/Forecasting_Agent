@@ -8,6 +8,23 @@ export interface Forecast {
   createdAt?: Date;
   as_of?: Date;
   asOf?: Date;
+  degraded?: boolean;
+}
+
+// Observation record storing raw and normalised search results along with allowlist verdict.
+export interface SearchObservation {
+  id?: string;
+  forecast_run_id: string;
+  query: string;
+  normalized_query: string;
+  provider: string;
+  result_rank: number;
+  title?: string | null;
+  url?: string | null;
+  hostname?: string | null;
+  allowed: boolean;
+  content?: string | null;
+  retrieved_at: Date;
 }
 
 export interface DebateTrace {

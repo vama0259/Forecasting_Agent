@@ -23,6 +23,15 @@ describe('langfuse tracing', () => {
       langfuse_secret_key: 'sk-test',
       langfuse_base_url: 'http://localhost:1',
     },
+    redis: { url: 'redis://127.0.0.1:6379' },
+    search: {
+      initial_run_budget: 20,
+      daily_cap: 2000,
+      run_ttl_seconds: 21600,
+      provider_timeout_ms: 15000,
+      max_results: 10,
+      allowed_domains: ['moneycontrol.com'],
+    },
   };
 
   it('startForecastTrace returns a handle with a real OTel-generated trace ID', () => {
