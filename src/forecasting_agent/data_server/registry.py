@@ -9,6 +9,7 @@ from typing import Any
 import yaml  # type: ignore[import-untyped]
 
 from forecasting_agent.data_server.plugins.base import MarketPlugin
+from forecasting_agent.data_server.plugins.fallback import FallbackPlugin
 
 
 class PluginRegistry:
@@ -37,13 +38,18 @@ class PluginRegistry:
 
         for market, target in manifest.items():
             market_key = str(market).strip().upper()
-            target_str = str(target).strip()
 
-            if target_str not in module_instances:
-                plugin_instance = self._instantiate_plugin(target_str)
-                module_instances[target_str] = plugin_instance
+            if isinstance(target, list):
+                plugin_list: list[MarketPlugin] = [self._instantiate_plugin(str(item).strip()) for item in target]
+                self._plugins[market_key] = FallbackPlugin(plugin_list)
+            else:
+                target_str = str(target).strip()
 
-            self._plugins[market_key] = module_instances[target_str]
+                if target_str not in module_instances:
+                    plugin_instance = self._instantiate_plugin(target_str)
+                    module_instances[target_str] = plugin_instance
+
+                self._plugins[market_key] = module_instances[target_str]
 
     def _instantiate_plugin(self, target: str) -> MarketPlugin:
         if ":" in target:

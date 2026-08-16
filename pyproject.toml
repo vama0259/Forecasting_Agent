@@ -11,6 +11,11 @@ dependencies = [
     "pydantic>=2.13",
     "scikit-learn>=1.7",
     "yfinance>=1.6.0",
+    "smartapi-python>=1.5.5",
+    "pyotp>=2.10.0",
+    "logzero",
+    "websocket-client",
+    "httpx>=0.28.0",
 ]
 
 [dependency-groups]
@@ -22,7 +27,6 @@ dev = [
     "bandit[toml]>=1.8.0",
     "mypy>=1.15",
     "pre-commit>=4.0",
-    "httpx>=0.28.0",
     "hypothesis>=6.165.6",
     "import-linter>=2.13",
 ]
@@ -40,6 +44,7 @@ python-preference = "only-managed"
 [tool.ruff]
 target-version = "py312"
 line-length = 120
+extend-exclude = [".codex", ".agents", ".claude"]
 
 [tool.ruff.lint]
 select = [
@@ -61,6 +66,9 @@ select = [
 ]
 ignore = ["S101"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["forecasting_agent"]
 
@@ -74,7 +82,7 @@ markers = [
 ]
 
 [tool.bandit]
-exclude_dirs = ["tests", ".agents", ".claude"]
+exclude_dirs = ["tests", ".agents", ".claude", ".codex"]
 skips = ["B101"]
 
 [tool.mypy]
@@ -85,5 +93,5 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = "sklearn.*"
+module = ["sklearn.*", "SmartApi", "logzero"]
 ignore_missing_imports = true
