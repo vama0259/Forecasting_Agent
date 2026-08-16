@@ -113,7 +113,7 @@ This is the kind of detail that costs an implementation round if the spec assert
 - `SearchBudgetLedger` — Redis only. Knows nothing about search.
 - `RunScopedSearchCache` — Redis only. Knows nothing about budgets.
 - `AnySearchProvider` — MCP only. Knows nothing about budgets or caching.
-- the storage `Pool` — passed to `saveSearchObservations` at §4 step 7. Listed explicitly because an earlier draft of this spec said "five collaborators" while §4 called a repository function, and an unlisted dependency is one an implementer has to invent a source for.
+- the storage `Pool` — passed to `saveSearchObservations` at §4 step 7. Listed because it is a real constructor dependency, easy to miss when reading §4 in isolation.
 
 This is the Dependency Inversion point ADR-015 requires: agents receive a `SearchCapability` typed against the `search` capability name and never learn the provider's identity.
 
@@ -213,6 +213,20 @@ Two rules follow, and both are load-bearing:
 
 This also keeps the agent's prompt surface honest: the model sees one tool called `search_news`, not four provider tools plus a budget concept it has no business reasoning about.
 
+**Where it all gets constructed.** `harness/scripts/run-real-pipeline.ts` is the only real entrypoint, and it currently builds `Pool`, config, and nothing else before calling `runSingleAgentPipeline`. It gains: the `ioredis` client, `SearchBudgetLedger`, `RunScopedSearchCache`, `AnySearchProvider`, and the `AnySearchCapability` composed from them — then registers that capability and awaits `validateAll()` (§9). The capability is passed into `runSingleAgentPipeline`, which calls `beginRun`/`endRun` and builds the per-run tool via `buildSearchTool(capability, runId)`, appending it to the `tools` array alongside the market-data tools. Naming this is not pedantry: §3a's wrapper needs a `runId` that only exists inside `runForecast`, while the capability itself is process-scoped, so the two are constructed at different levels and an implementer who guesses will put them in the same place.
+
+## 3b. Cost meter — the AC subtask with no consumer yet
+
+Issue #21 lists "emit spend per run into the cost meter feeding ADR-011's meta-metrics." **No cost meter exists in this repo** — nothing named or shaped like one appears anywhere. Rather than invent an interface with no consumer, or quietly drop the subtask, this design emits the number into the one place that already aggregates per-run facts.
+
+Settled spend is derivable with no extra bookkeeping: `endRun` returns the refunded remainder, and `beginRun` returned the grant, so `spend = granted − refunded`. `runForecast` already calls `trace.update({ metadata: { symbol, runId } })`, and `TraceHandle.update` accepts an arbitrary `metadata` record — verified in `tracing/langfuse.ts`. So:
+
+```ts
+trace.update({ metadata: { symbol, runId, search_granted, search_spent, search_degraded } });
+```
+
+Four fields, no new subsystem, and the run's search cost lands on the same Langfuse trace as everything else ADR-011 will want to join against. When a real cost meter is built it reads these; until then the number is recorded rather than lost. Stated as a deliberate minimum, not as a claim that the cost-meter subtask is fully built.
+
 ## 4. Data flow
 
 `isDegraded(runId)` below is shorthand for the combined check of §3 — `await ledger.isDegraded(runId) || localDegraded.has(runId)` — never the Redis field alone.
@@ -245,7 +259,9 @@ Naming the seam matters because a claim placed inside `search()` would re-claim 
 
 Order is deliberate at three points:
 
-- **Cache before budget.** A repeat query inside a run must cost zero units — that is the ~4× effective-quota multiplier ADR-017 is built on, and the reason every debate round sees identical evidence.
+- **Cache before budget.** A repeat query inside a run must cost zero units — that is the effective-quota multiplier ADR-017 is built on, and the reason every debate round sees identical evidence.
+
+  **The ~4× figure holds for sequential repeats only, and this design does not yet deliver it under concurrency.** ADR-017 justifies the multiplier with "3 sub-agents × 4 rounds produce heavily overlapping queries." If those sub-agents run *concurrently*, two identical queries both miss the cache, both spend a unit, and both call the provider — steps 2 and 3 are not atomic with respect to each other, and there is no single-flight guard. The fix is a small in-flight `Map<cacheKey, Promise<SearchOutcome>>` so the second caller awaits the first's result instead of issuing its own request. It is **deferred**, not overlooked: the pipeline is single-agent today, so no two searches in a run can overlap, and a guard written now would be untestable against the concurrency pattern it is meant to handle. It must land with the multi-agent debate (#10 onward), and until it does the honest claim is "up to ~4× on sequential overlap," not "~4×."
 - **Spend before the provider call, and no refund on provider failure.** If the HTTP call fails after we decremented, the unit stays spent. We cannot know whether AnySearch counted it server-side, so we over-count rather than under-count. Under-counting would breach the ceiling this story exists to enforce.
 - **Persist before caching, and persist rejects too.** Everything the provider returned is archived, including allowlist-rejected results (`allowed = false`). The allowlist is a guess that will be re-tuned; retrospective tuning is only possible if the rejected results were kept. Persistence is not conditional on the filter's opinion.
 
@@ -455,15 +471,38 @@ redis:
 
 Secret handling is already covered: `Interpolator.used` collects every interpolated value and `ConfigValidationError` redacts them, so the expanded key never reaches a config error message. `CapabilityHealthError` does **not** redact — noted in §10, since a health-check failure message must therefore never be built from the header value.
 
-Two startup gates satisfy the AC's "fails loudly on a bad binding":
-1. `config-loader.ts`'s existing dangling-binding check — `capabilities.search: "anysearch"` must exist in `mcp_servers`. Already implemented; a test pins it for `search`.
-2. `AnySearchProvider.healthCheck(signal)` — issues `tools/list` and asserts a tool named `search` is present. `CapabilityRegistry.validateAll()` already races every provider's `healthCheck` against a 5s timeout and throws `CapabilityHealthError` on any failure, so wiring the method is the whole change.
+### Startup validation — the machinery exists but nothing runs it
+
+The AC asks that "startup validation fails loudly on a bad binding." Two pieces of machinery already exist for that, and **neither is currently reachable from a real run.** Verified:
+
+- `grep -rn "CapabilityRegistry|validateAll|createCapabilityAccessor" src scripts` returns hits **only inside `registry.ts` itself**. The sole consumer anywhere in the repo is `tests/registry.test.ts`. `single-agent.ts` and `run-real-pipeline.ts` never construct a registry — they go `config.capabilities.market_data` → `config.mcp_servers[...]` → `new MultiServerMCPClient` directly. The capability layer from #4 is, on the pipeline path, dead code.
+- `run-real-pipeline.ts` — the only real entrypoint — **does not call `loadConfig` at all.** It builds a `HarnessConfig` object literal inline from `process.env`, hardcoding `capabilities: { chat: 'llm', search: 'llm', sentiment: 'llm', market_data: 'market' }`. So `config-loader.ts`'s dangling-binding check never executes in a real run either.
+
+An earlier draft of this spec said "wiring the method is the whole change." That was wrong, and it is exactly the kind of claim that reads plausibly and costs an implementation round. The actual work:
+
+1. `run-real-pipeline.ts` switches to `loadConfig('harness/harness_config.yaml')` instead of the inline literal, so interpolation, schema validation, and the dangling-binding check all run. This is the smallest change that makes gate 1 real, and it retires a config literal that has already drifted from the YAML.
+
+   **This one carries real regression risk and must not be done casually.** The two configs launch the market-data MCP server *differently*:
+
+   | | market-data launch |
+   |---|---|
+   | `run-real-pipeline.ts` (working today) | `command: 'bash'`, `args: ['-c', 'cd <absolute REPO_ROOT> && exec uv run python -m forecasting_agent.data_server.server']` |
+   | `harness_config.yaml` (untested by any real run) | `command: 'uv'`, `args: ['run', '--directory', '..', 'python', '-m', 'forecasting_agent.data_server.server']` |
+
+   The YAML form depends on the process's cwd being `harness/` for `--directory ..` to resolve; the inline form is cwd-independent by construction. Switching entrypoints therefore changes how the *only currently-working pipeline* starts its data server. The plan task that makes this switch must reconcile the YAML entry against the form known to work and then prove the market-data server still launches — a passing search test says nothing about it. Sequence the switch **before** the search wiring so a breakage is attributable to one change rather than two.
+2. The construction site instantiates a `CapabilityRegistry`, registers the search capability, and awaits `validateAll()` **before** the first pipeline run. `AnySearchProvider.healthCheck(signal)` issues `tools/list` and asserts a tool named `search` is present; `validateAll()` already races each probe against a 5s timeout and throws `CapabilityHealthError` on any failure. That part genuinely is already built — it just has no caller.
+
+**Scope note, stated rather than absorbed silently.** Item 1 and item 2 are broader than "add a search capability" — they activate a layer #4 delivered but never connected. #21 does the minimum to make its own AC true: register and validate `search`, and route the real entrypoint through `loadConfig`. It does **not** migrate `market_data` onto the registry, even though the same argument applies to it, because that is #4's unfinished wiring rather than #21's, and touching the market-data path risks the one pipeline that currently works end-to-end.
 
 ## 10. Sandbox reachability — what is enforced, and what is not
 
 **AC:** "no search path is reachable from a sandbox container."
 
-**What is enforced by this story.** The `search` capability is a harness-side object handed to the agent's tool list; it is never bound into a container. Containers receive no search credential — `getOrCreateWarmContainer` sets `Memory`, `NanoCpus`, `Binds` and no `Env` at all. A regression test pins both: no `ANYSEARCH_*` value in any container's environment, and no search-named tool in the sandbox toolset.
+**What is enforced by this story — and the argument is structural, not procedural.** `SandboxBackendAdapter` extends `BaseSandbox` and exposes exactly four methods: `execute`, `uploadFiles`, `downloadFiles`, `dispose`. There is no container-facing tool registry at all. The agent's tools — including `search_news` — are LangChain `StructuredTool`s invoked in the **harness process**; the container is on the other side of an exec/file boundary and never receives a tool array. So "search is not bound into the sandbox" is not a rule someone must remember to follow; there is no mechanism by which it could be.
+
+(An earlier draft proposed asserting "no search-named tool in the sandbox toolset." That test is unwriteable — there is no such toolset to assert against. Dropped rather than fudged into something that would pass while checking nothing.)
+
+Containers also receive no search credential: `getOrCreateWarmContainer` sets `Memory`, `NanoCpus`, and `Binds`, and passes **no `Env` key whatsoever**. The writeable regression test is therefore the environment one — inspect a real created container and assert no `ANYSEARCH_*` variable is present — which guards against a future change that starts forwarding host env into containers.
 
 **What is not enforced, with evidence.** The explore tier has default bridge networking (deliberately — ADR-021 gives it PyPI for self-extension), and AnySearch serves anonymous requests. Running a probe inside the real `forecasting-sandbox:latest` image:
 
@@ -522,7 +561,11 @@ Closing it means egress filtering — a custom Docker network plus an allowlisti
 
 **Integration — real Postgres:** `saveSearchObservations` round-trips allowed and rejected rows for one run; `saveForecast` persists `degraded = true`.
 
-**Integration — real Docker:** container environment contains no `ANYSEARCH_*` variable (§10).
+**Integration — real Docker:** a real created container's environment contains no `ANYSEARCH_*` variable (§10).
+
+**Integration — startup validation (§9):**
+- *A bad binding fails loudly* — `capabilities.search` pointing at a server absent from `mcp_servers` throws `ConfigValidationError` naming `capabilities.search`, via `loadConfig`. Requires the entrypoint to actually call `loadConfig`, which is part of this story's scope.
+- *A dead provider fails at startup, not at first search* — a registered search capability whose `healthCheck` rejects makes `validateAll()` throw `CapabilityHealthError` before any run begins.
 
 **End-to-end smoke — real AnySearch, real Redis, real Postgres, no mocks:**
 ```
@@ -544,12 +587,15 @@ Explicitly **harness-level, not a forecast run.** The pipeline is still single-a
 - **Leaked allocations from hard process kills** (§5) — bounded and daily-reset; a reaper costs more than the leak.
 - **`CapabilityHealthError` does not redact secrets** — no current path puts a secret in a health-check message, but the asymmetry with `ConfigValidationError` is a trap for whoever writes the next `healthCheck`. Noted, not fixed here.
 - **Provider markdown format is unversioned** — the parser is coupled to a shape AnySearch can change without notice. Mitigated by failing loud (§11) rather than by pinning a version the provider does not offer.
+- **Single-flight for concurrent identical queries** (§4) — must land with the multi-agent debate, since it cannot be tested against a single-agent pipeline. Until then the cache multiplier applies to sequential overlap only.
+- **A real cost meter** (§3b) — settled spend is emitted to Langfuse trace metadata because no cost-meter subsystem exists to emit it to. The AC subtask is satisfied in substance, not by building the consumer.
+- **Migrating `market_data` onto the capability registry** (§9) — the same dead-code argument applies to it, but that is #4's unfinished wiring, and the market-data path is the only pipeline that currently works end to end.
 - **No retention policy on `search_observations.content`** (~80MB/day at 100 runs, §8). Deferred until #10 shows what actually gets re-read; a policy written now would be guessing at the access pattern.
 - **`extract` is unbound, so a result's full article body is never fetched** — only the ~4KB snippet AnySearch returns inline. If FinBERT turns out to need full articles, `extract` is the tool and it costs one unit per call; noted so #10 discovers this from the spec rather than from a shortfall.
 
 ## 14. Verification log
 
-Everything in this spec that could be run, was run, on 2026-08-16/17 against real infrastructure. Recorded so a later reader can tell asserted claims from tested ones, and so Round 2 of `reviewing-specs` re-checks the fixes rather than the prose.
+Everything in this spec that could be run, was run, on 2026-08-16/17 against real infrastructure — the live AnySearch server, the running Redis and Postgres containers, the real sandbox image, and `tsc` under this repo's exact strict flags. Recorded so a later reader can tell asserted claims from tested ones. Several rows record a claim that turned out **false**; those are kept, because a spec that only lists its confirmations hides where its author was wrong.
 
 | Claim | Method | Result |
 |---|---|---|
@@ -571,19 +617,26 @@ Everything in this spec that could be run, was run, on 2026-08-16/17 against rea
 | Archive round-trips allowed and rejected rows | Real Postgres insert + select | Both rows returned with correct `allowed` flags |
 | `degraded=true` persists on a forecast | Real Postgres | `[{"degraded":true}]` |
 | Explore tier reaches AnySearch; validate tier does not | Real `forecasting-sandbox:latest` container, both network modes | Reached / blocked, §10 |
-| **Round 2:** un-guarded `HSET` leaks a TTL-less key | Real Redis | `exists: 1, ttl: -1` — the Round-1 fix was wrong; guarded Lua adopted (§3) |
-| **Round 2:** guarded `markDegraded` preserves TTL | Real Redis | Missing key: returns 0, creates nothing. Live key: sets field, TTL 600 → 600 |
-| **Round 2:** MCP tool honours `config.signal` | Live server, `AbortSignal.timeout(50)` | Rejected at 51 ms — but as `ToolException`, so detect via `signal.aborted`, not the message (§4) |
-| **Round 3:** the spec's public types compile | `tsc --noEmit` on `SearchResult`/`SearchOutcome`/`SearchCapability` + parser + allowlist, under the repo's exact flags | Clean, no non-null assertions needed despite `noUncheckedIndexedAccess` |
-| **Round 3:** allowlist admits `www.` and rejects the spoof | Runtime, real hostnames | `www.moneycontrol.com` → allowed, `notmoneycontrol.com.evil.tld` → rejected |
-| **Round 3:** `AbortSignal.any` composes on both legs | Runtime, Node 24 | Works — then dropped as YAGNI (§4), recorded so the removal is a choice, not an oversight |
-| **Round 4:** is `resolve('search').search(...)` callable today? | `tsc --noEmit` against the real `CapabilityRegistry` | **No** — `TS2339`. `CapabilityMap` needs narrowing (§3) |
-| **Round 4:** does the `MarketDataProvider` narrowing precedent work? | `tsc --noEmit` on `resolve('market_data').fetch_ohlcv(...)` | Clean — the one-line fix is proven, not assumed |
-| **Round 5:** the ISP split compiles and actually segregates | `tsc --noEmit`, one class implementing both interfaces, registered on the real registry | Clean, **including** the `@ts-expect-error` on `forAgent.beginRun` — so the boundary is enforced by the compiler, not by convention |
-| **Round 8:** do the new config keys and env names collide? | `grep` over the repo and `harness_config.yaml`'s top-level keys | No collisions — `search:`/`redis:` free, `REDIS_URL`/`ANYSEARCH*` unreferenced |
-| **Round 8:** does `.env.example` exist to append to? | `git ls-tree` across `main`, `dev`, `feat/issue-30-…` | **Only on #30's branch** — cross-branch coupling, §9 |
-| **Round 9:** does `pnpm test` run everything by default? | `package.json` scripts + the `storage-integration.test.ts` precedent | Yes, `vitest run` with no tagging — so the live-provider smoke must be env-gated or the suite spends real quota (§12) |
-| **Round 10:** does `describe.skipIf` actually gate on an env var? | Real vitest 4.1.10 run, gated block containing a deliberately failing assertion | `1 passed \| 1 skipped` — the failing test never ran, so the gate is proven, not assumed |
-| **Round 11:** can an agent even reach a `SearchCapability`? | Read `price-anchor.ts` + `@langchain/core` tool types | **No** — agents take `StructuredTool[]`. `tool()` returns `DynamicStructuredTool extends StructuredTool`, so a wrapper is required; §3a added |
+| un-guarded `HSET` leaks a TTL-less key | Real Redis | `exists: 1, ttl: -1` — the first design was wrong; guarded Lua adopted (§3) |
+| guarded `markDegraded` preserves TTL | Real Redis | Missing key: returns 0, creates nothing. Live key: sets field, TTL 600 → 600 |
+| MCP tool honours `config.signal` | Live server, `AbortSignal.timeout(50)` | Rejected at 51 ms — but as `ToolException`, so detect via `signal.aborted`, not the message (§4) |
+| the spec's public types compile | `tsc --noEmit` on `SearchResult`/`SearchOutcome`/`SearchCapability` + parser + allowlist, under the repo's exact flags | Clean, no non-null assertions needed despite `noUncheckedIndexedAccess` |
+| allowlist admits `www.` and rejects the spoof | Runtime, real hostnames | `www.moneycontrol.com` → allowed, `notmoneycontrol.com.evil.tld` → rejected |
+| `AbortSignal.any` composes on both legs | Runtime, Node 24 | Works — then dropped as YAGNI (§4), recorded so the removal is a choice, not an oversight |
+| is `resolve('search').search(...)` callable today? | `tsc --noEmit` against the real `CapabilityRegistry` | **No** — `TS2339`. `CapabilityMap` needs narrowing (§3) |
+| does the `MarketDataProvider` narrowing precedent work? | `tsc --noEmit` on `resolve('market_data').fetch_ohlcv(...)` | Clean — the one-line fix is proven, not assumed |
+| the ISP split compiles and actually segregates | `tsc --noEmit`, one class implementing both interfaces, registered on the real registry | Clean, **including** the `@ts-expect-error` on `forAgent.beginRun` — so the boundary is enforced by the compiler, not by convention |
+| do the new config keys and env names collide? | `grep` over the repo and `harness_config.yaml`'s top-level keys | No collisions — `search:`/`redis:` free, `REDIS_URL`/`ANYSEARCH*` unreferenced |
+| does `.env.example` exist to append to? | `git ls-tree` across `main`, `dev`, `feat/issue-30-…` | **Only on #30's branch** — cross-branch coupling, §9 |
+| does `pnpm test` run everything by default? | `package.json` scripts + the `storage-integration.test.ts` precedent | Yes, `vitest run` with no tagging — so the live-provider smoke must be env-gated or the suite spends real quota (§12) |
+| does `describe.skipIf` actually gate on an env var? | Real vitest 4.1.10 run, gated block containing a deliberately failing assertion | `1 passed \| 1 skipped` — the failing test never ran, so the gate is proven, not assumed |
+| can an agent even reach a `SearchCapability`? | Read `price-anchor.ts` + `@langchain/core` tool types | **No** — agents take `StructuredTool[]`. `tool()` returns `DynamicStructuredTool extends StructuredTool`, so a wrapper is required; §3a added |
+| is `CapabilityRegistry` wired into any real run? | `grep -rn "CapabilityRegistry\|validateAll" src scripts` | **No** — hits only inside `registry.ts`; sole consumer is `tests/registry.test.ts`. #4's layer is dead code on the pipeline path (§9) |
+| does the real entrypoint call `loadConfig`? | Read `scripts/run-real-pipeline.ts` | **No** — builds a `HarnessConfig` literal inline, so the dangling-binding check never runs; and its market-data launch differs from the YAML's (§9) |
+| can settled spend reach a trace? | Read `tracing/langfuse.ts` | Yes — `TraceHandle.update` takes an arbitrary `metadata` record, and `runForecast` already calls it (§3b) |
+| is there a container-facing toolset to assert against? | Read `sandbox/deepagents-adapter.ts` | **No** — `execute`/`uploadFiles`/`downloadFiles`/`dispose` only. The proposed §10 test was unwriteable and was dropped |
+
+| the branch is green with the new dependency | `pnpm typecheck`, `pnpm lint`, `pnpm test` | typecheck and lint clean; 72 passed, 5 failed |
+| those 5 failures are not ours | same tests run from a clean `main` worktree | **Identical failures on pristine `main`** — `SASL: client password must be a string`, i.e. `TEST_DATABASE_URL` is unset. Pre-existing and environmental |
 
 The dev database was returned to its exact prior state after the migration probe (`search_observations` dropped, `forecasts.degraded` dropped, test rows deleted; 8 tables and 7 forecast columns confirmed restored).
