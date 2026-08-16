@@ -13,3 +13,23 @@ forbidden_modules =
     forecasting_agent.data_server.normalizer
     forecasting_agent.data_server.point_in_time
     forecasting_agent.data_server.cache
+
+[importlinter:contract:archive-downloader-bhavcopy-isolation]
+name = Archive bhavcopy downloader isolation
+type = forbidden
+source_modules =
+    forecasting_agent.archive.downloaders.nse_bhavcopy
+forbidden_modules =
+    forecasting_agent.archive.store
+    forecasting_agent.archive.downloaders.nse_participant_oi
+    forecasting_agent.data_server
+
+[importlinter:contract:archive-downloader-participant-oi-isolation]
+name = Archive participant OI downloader isolation
+type = forbidden
+source_modules =
+    forecasting_agent.archive.downloaders.nse_participant_oi
+forbidden_modules =
+    forecasting_agent.archive.store
+    forecasting_agent.archive.downloaders.nse_bhavcopy
+    forecasting_agent.data_server
