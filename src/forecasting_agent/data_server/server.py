@@ -181,12 +181,10 @@ def fetch_ohlcv(
 @app.tool()
 def fetch_option_chain(
     underlying: str,
-    expiry: str,
+    expiry: str | None = None,
     as_of: str | None = None,
 ) -> FnOChainResponse:
-    # Fetch option chain for an underlying and expiry.
-    expiry_date = date.fromisoformat(expiry) if isinstance(expiry, str) else expiry
-
+    """Fetch option chain for an underlying and expiry (defaults to nearest available expiry cycle if omitted)."""
     if as_of is not None:
         as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
         today = date.today()  # noqa: DTZ011
@@ -198,9 +196,19 @@ def fetch_option_chain(
         ticker_symbol = f"{underlying}.NS"
 
     strikes_map: dict[float, dict[str, Any]] = {}
+    resolved_expiry_date = None
     try:
         ticker = yf.Ticker(ticker_symbol)
-        chain = ticker.option_chain(expiry)
+        options = getattr(ticker, "options", [])
+        if expiry:
+            target_expiry = expiry
+        elif options:
+            target_expiry = options[0]
+        else:
+            target_expiry = str(as_of or date.today())  # noqa: DTZ011
+
+        resolved_expiry_date = date.fromisoformat(target_expiry)
+        chain = ticker.option_chain(target_expiry) if target_expiry in options else ticker.option_chain()
         calls_df = chain.calls
         puts_df = chain.puts
 
@@ -237,7 +245,7 @@ def fetch_option_chain(
 
     return FnOChainResponse(
         underlying=underlying,
-        expiry=expiry_date,
+        expiry=resolved_expiry_date or (date.fromisoformat(as_of) if as_of else date.today()),  # noqa: DTZ011
         strikes=strikes,
         data_stale=False,
     )
