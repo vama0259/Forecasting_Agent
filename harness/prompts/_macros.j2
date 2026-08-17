@@ -1,5 +1,6 @@
 {% macro eval_contract(symbol, as_of) %}
 Save a SELF-CONTAINED Python script to `/workspace/model.py`.
+It will be re-executed in an isolated validation container with NO network access and NO external files -- embed the computed returns, forecasts, calls, timestamps, trade_side, and position_notional directly as literal Python lists (or embedded data) in the script.
 When run standalone (`python /workspace/model.py`), it must write a JSON object to `/tmp/eval_request.json` containing:
 - `returns`: list of historical fractional returns
 - `forecasts`: list of predicted returns for each step

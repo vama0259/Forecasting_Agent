@@ -217,7 +217,10 @@ async function runMultiAgentForecast({
 
     const anchorSignal = signals[anchorConfig.name];
     if (!anchorSignal) {
-      throw new Error(`Anchor agent '${anchorConfig.name}' failed to produce a valid signal`);
+      const anchorErr = participantResults.find((r) => r.agentName === anchorConfig.name)?.error;
+      throw new Error(
+        `Anchor agent '${anchorConfig.name}' failed to produce a valid signal${anchorErr ? `: ${anchorErr}` : ''}`,
+      );
     }
 
     const modelScriptPath = await writeModelScript(sandboxAdapter, anchorSignal, runId);

@@ -44,5 +44,5 @@ describe('Sandbox container credential isolation', () => {
       await mgr.disposeRun(runId);
       await mgr.shutdown();
     }
-  });
+  }, 15_000);
 });

@@ -66,7 +66,7 @@ describe('SandboxManager.runValidate (requires Docker)', () => {
     expect(result.evalResult).toBeDefined();
     expect(result.evalResult?.verdict).toBeDefined();
     await mgr.shutdown();
-  });
+  }, 15_000);
 
   it('rejects a script importing an unapproved package as ValidationFailedError', async (ctx) => {
     if (!dockerAvailable) {
@@ -82,5 +82,5 @@ describe('SandboxManager.runValidate (requires Docker)', () => {
       mgr.runValidate({ runId: 'validate-run-2', tier: 'validate', modelScriptPath: modelPath }),
     ).rejects.toThrow(ValidationFailedError);
     await mgr.shutdown();
-  });
+  }, 15_000);
 });

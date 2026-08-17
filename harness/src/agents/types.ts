@@ -11,7 +11,7 @@ export const ParticipantAgentConfigSchema = z.object({
   allowedWritePaths: z.array(z.string()),
   tools: z.array(z.string()),
   skills: z.array(z.string()).default([]),
-  maxTokenBudget: z.number().int().positive().default(200_000),
+  maxTokenBudget: z.number().int().positive().default(400_000),
   horizon_days: z.literal(1),
   generatedBy: z.enum(['human', 'agent']).default('human'),
 });
@@ -35,7 +35,7 @@ export const AGENT_CONFIGS: ParticipantAgentConfig[] = [
     ],
     tools: ['fetch_ohlcv'],
     skills: [],
-    maxTokenBudget: 200_000,
+    maxTokenBudget: 400_000,
     horizon_days: 1,
     generatedBy: 'human',
   },

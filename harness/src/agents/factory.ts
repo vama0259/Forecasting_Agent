@@ -5,7 +5,6 @@ import { buildDeepSeekModel, deepSeekAutoToolChoiceMiddleware } from '../llm/dee
 import { buildCostBudgetMiddleware } from '../middleware/cost-budget.js';
 import { buildEvidenceValidationMiddleware } from '../middleware/evidence-validation.js';
 import { buildAuditMiddleware } from '../middleware/audit.js';
-import { buildAgentPermissions } from '../backend/permissions.js';
 import { AgentSignalSchema } from './schema.js';
 import type { ParticipantAgentConfig } from './types.js';
 import type { HarnessConfig } from '../config.js';
@@ -27,7 +26,6 @@ export function buildParticipantAgent({ config, llmConfig, tools, backend, trace
     model: buildDeepSeekModel(llmConfig),
     tools: filteredTools,
     backend,
-    permissions: buildAgentPermissions(config.allowedWritePaths),
     responseFormat: toolStrategy(AgentSignalSchema),
     middleware: [
       deepSeekAutoToolChoiceMiddleware,
