@@ -37,8 +37,16 @@ export class SandboxBackendAdapter extends BaseSandbox {
   // Takes Python source as code; returns its ExecuteResponse via the explore tier.
   async execute(command: string): Promise<ExecuteResponse> {
     const start = Date.now();
-    console.error(`[${this.id}] adapter.execute: start (${command.length} chars): ${command.slice(0, 120)}`);
-    const result = await this.#manager.runExplore({ runId: this.id, tier: 'explore', code: command });
+    // Guard against deepagents scanning the entire root filesystem '/' (which hangs on /proc, /sys, /usr)
+    let sanitized = command;
+    if (sanitized.includes("find -L '/'") || sanitized.includes('find -L "/"')) {
+      sanitized = sanitized
+        .replaceAll("find -L '/'", "find -L '/workspace'")
+        .replaceAll('find -L "/"', 'find -L "/workspace"')
+        .replaceAll("-not -path '/'", "-not -path '/workspace'");
+    }
+    console.error(`[${this.id}] adapter.execute: start (${sanitized.length} chars): ${sanitized.slice(0, 120)}`);
+    const result = await this.#manager.runExplore({ runId: this.id, tier: 'explore', code: sanitized });
     console.error(`[${this.id}] adapter.execute: done in ${Date.now() - start}ms exitCode=${result.exitCode}`);
     return {
       output: result.stdout + result.stderr,

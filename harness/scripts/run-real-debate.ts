@@ -3,6 +3,7 @@
 // Run with: pnpm exec tsx --env-file=../.env scripts/run-real-debate.ts <SYMBOL>
 
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { MultiServerMCPClient } from 'langchain-mcp-adapters';
 import { loadConfig } from '../src/config-loader.js';
@@ -120,7 +121,16 @@ try {
   const forecastRes = await pool.query('SELECT id FROM forecasts WHERE symbol = $1 ORDER BY created_at DESC LIMIT 1', [
     symbol,
   ]);
-  const forecastId = forecastRes.rows[0]?.id;
+  let forecastId = forecastRes.rows[0]?.id;
+  if (!forecastId) {
+    forecastId = randomUUID();
+    const anchorSignal = r1PipelineResult.signals.price;
+    await pool.query(
+      `INSERT INTO forecasts (id, symbol, horizon, prediction, confidence, created_at, as_of, degraded)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), false)`,
+      [forecastId, symbol, '1d', JSON.stringify(anchorSignal), anchorSignal?.confidence ?? 0.5],
+    );
+  }
 
   const consensus = await orchestrator.runDebate({
     forecastId,

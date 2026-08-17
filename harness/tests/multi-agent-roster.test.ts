@@ -38,7 +38,7 @@ describe('Multi-Agent Roster Configuration', () => {
     for (const config of AGENT_CONFIGS) {
       const parsed = ParticipantAgentConfigSchema.parse(config);
       expect(parsed.name).toBe(config.name);
-      expect(parsed.maxTokenBudget).toBe(400_000);
+      expect(parsed.maxTokenBudget).toBe(1_000_000);
       expect(parsed.horizon_days).toBe(1);
       expect(parsed.generatedBy).toBe('human');
     }
@@ -55,7 +55,7 @@ describe('Multi-Agent Roster Configuration', () => {
       workspaceSubpath: 'price',
       tools: ['fetch_ohlcv'],
       skills: [],
-      maxTokenBudget: 400_000,
+      maxTokenBudget: 1_000_000,
       horizon_days: 1,
       generatedBy: 'human',
     });
@@ -78,7 +78,7 @@ describe('Multi-Agent Roster Configuration', () => {
       workspaceSubpath: 'fii',
       tools: ['fetch_flows', 'fetch_ohlcv'],
       skills: [],
-      maxTokenBudget: 400_000,
+      maxTokenBudget: 1_000_000,
       horizon_days: 1,
       generatedBy: 'human',
     });
@@ -101,7 +101,7 @@ describe('Multi-Agent Roster Configuration', () => {
       workspaceSubpath: 'dii',
       tools: ['fetch_flows', 'fetch_ohlcv'],
       skills: [],
-      maxTokenBudget: 400_000,
+      maxTokenBudget: 1_000_000,
       horizon_days: 1,
       generatedBy: 'human',
     });
@@ -124,7 +124,7 @@ describe('Multi-Agent Roster Configuration', () => {
       workspaceSubpath: 'retail',
       tools: ['fetch_microstructure', 'fetch_option_chain', 'fetch_ohlcv'],
       skills: [],
-      maxTokenBudget: 400_000,
+      maxTokenBudget: 1_000_000,
       horizon_days: 1,
       generatedBy: 'human',
     });
