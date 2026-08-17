@@ -11,7 +11,7 @@
     "lint": "eslint . && prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format": "eslint . --fix && prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --fileParallelism=false"
   },
   "dependencies": {
     "@langchain/core": "^1.2.8",

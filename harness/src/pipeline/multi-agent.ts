@@ -80,16 +80,43 @@ export async function dispatchParticipantAgents(params: {
         trace,
       });
 
-      const signal = await invokeAgentTurn<AgentSignal>({
-        invoke: (invokeCfg) =>
-          agent.invoke(
-            { messages: [{ role: 'user', content: prompt }] },
-            { ...invokeCfg, callbacks: [langfuseHandler] },
-          ),
-        schema: AgentSignalSchema,
-        trace,
-        turnId: `${config.name}-${symbol}`,
-      });
+      let signal: AgentSignal;
+      try {
+        signal = await invokeAgentTurn<AgentSignal>({
+          invoke: (invokeCfg) =>
+            agent.invoke(
+              { messages: [{ role: 'user', content: prompt }] },
+              { ...invokeCfg, callbacks: [langfuseHandler] },
+            ),
+          schema: AgentSignalSchema,
+          trace,
+          turnId: `${config.name}-${symbol}`,
+        });
+      } catch (firstErr) {
+        const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+        if (errMsg.includes('expected object, received undefined')) {
+          signal = await invokeAgentTurn<AgentSignal>({
+            invoke: (invokeCfg) =>
+              agent.invoke(
+                {
+                  messages: [
+                    { role: 'user', content: prompt },
+                    {
+                      role: 'user',
+                      content: `You have completed your code execution. You MUST now call the AgentSignal tool to provide your final structured forecast with agent_name: "${config.name}".`,
+                    },
+                  ],
+                },
+                { ...invokeCfg, callbacks: [langfuseHandler] },
+              ),
+            schema: AgentSignalSchema,
+            trace,
+            turnId: `${config.name}-${symbol}-retry`,
+          });
+        } else {
+          throw firstErr;
+        }
+      }
 
       if (signal.agent_name !== config.name) {
         throw new Error(

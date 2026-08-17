@@ -19,10 +19,12 @@ Produce a price-direction forecast for {{ symbol }} (NSE) as of {{ as_of }}.
 3. {{ macros.eval_contract(symbol, as_of) }}
 
 4. Separately, as your structured final response, give your own overall forecast for {{ symbol }}
-   over the next {{ horizon_days }} day:
+   over the next {{ horizon_days }} day by calling the AgentSignal tool:
    - `agent_name`: "price"
    - `direction`: "up" or "down"
    - `probability`: 0.0 to 1.0
    - `confidence`: 0.0 to 1.0
    - `horizon_days`: 1
    - `evidence`: list of observations citing `source_capability: "market_data"` or `"macro"`.
+
+IMPORTANT: You MUST conclude your turn by calling the AgentSignal structured response tool.
