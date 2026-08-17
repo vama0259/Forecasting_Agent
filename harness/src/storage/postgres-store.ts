@@ -13,12 +13,73 @@ export interface PostgresStoreOptions {
   pool: Pool;
 }
 
+export interface DebateRoundRecord {
+  forecastId: string;
+  symbol: string;
+  asOf: string; // ISO 8601 string
+  roundNumber: 1 | 2 | 3 | 4;
+  agentName: 'price' | 'fii' | 'dii' | 'retail' | 'consensus';
+  direction: 'up' | 'down';
+  probability: number;
+  confidence: number;
+  degraded: boolean;
+  payload: Record<string, unknown>;
+}
+
 export class PostgresStore extends BaseStore {
   private pool: Pool;
 
   constructor(options: PostgresStoreOptions) {
     super();
     this.pool = options.pool;
+  }
+
+  async saveDebateRound(record: DebateRoundRecord): Promise<void> {
+    const query = `
+      INSERT INTO debate_rounds (
+        forecast_id, symbol, as_of, round_number, agent_name, direction, probability, confidence, degraded, payload
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ON CONFLICT (forecast_id, round_number, agent_name) DO UPDATE SET
+        direction = EXCLUDED.direction,
+        probability = EXCLUDED.probability,
+        confidence = EXCLUDED.confidence,
+        degraded = EXCLUDED.degraded,
+        payload = EXCLUDED.payload;
+    `;
+    await this.pool.query(query, [
+      record.forecastId,
+      record.symbol,
+      record.asOf,
+      record.roundNumber,
+      record.agentName,
+      record.direction,
+      record.probability,
+      record.confidence,
+      record.degraded,
+      JSON.stringify(record.payload),
+    ]);
+  }
+
+  async getDebateRounds(forecastId: string): Promise<DebateRoundRecord[]> {
+    const query = `
+      SELECT forecast_id, symbol, as_of, round_number, agent_name, direction, probability, confidence, degraded, payload
+      FROM debate_rounds
+      WHERE forecast_id = $1
+      ORDER BY round_number ASC, created_at ASC;
+    `;
+    const result = await this.pool.query(query, [forecastId]);
+    return result.rows.map((r) => ({
+      forecastId: r.forecast_id,
+      symbol: r.symbol,
+      asOf: new Date(r.as_of).toISOString(),
+      roundNumber: r.round_number,
+      agentName: r.agent_name,
+      direction: r.direction,
+      probability: r.probability,
+      confidence: r.confidence,
+      degraded: r.degraded,
+      payload: typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload,
+    }));
   }
 
   async batch<Op extends Operation[]>(operations: Op): Promise<OperationResults<Op>> {

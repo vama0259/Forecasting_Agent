@@ -16,7 +16,7 @@ describe('full storage integration', () => {
     const pool = new Pool({ connectionString: TEST_DB_URL });
     await runMigrations(pool, 'src/storage/migrations');
     await pool.query(
-      'TRUNCATE forecasts, debate_traces, evaluation_results, agent_signals, debate_checkpoints, semantic_memory',
+      'TRUNCATE forecasts, debate_traces, evaluation_results, agent_signals, debate_checkpoints, semantic_memory, debate_rounds CASCADE',
     );
     await pool.end();
   });
