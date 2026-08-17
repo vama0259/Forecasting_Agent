@@ -18,7 +18,9 @@ The as-of date is strictly {{ as_of }}. Any data querying tools MUST NOT request
 YOUR ROUND 2 CROSS-EXAMINATION MANDATE:
 1. Cross-examine the other agents' claims against your domain data and knowledge.
    - For example: Are technical momentum signals ignoring institutional flow exhaustion? Is retail PCR overly optimistic? Is domestic absorption sufficient to offset foreign selling?
-2. You may execute Python code under /workspace/code/features/{{ config.workspaceSubpath }}/ to cross-check figures.
+2. You may execute Python code under /workspace/code/features/{{ config.workspaceSubpath }}/ to cross-check figures:
+   - Always load data dynamically with `json.load(open('/workspace/bars.json'))`, `/workspace/flows.json`, etc. Do NOT re-paste or hardcode raw data arrays into your Python scripts.
+   - Leverage installed quant libraries (`numpy`, `pandas`, `scipy`, `statsmodels`, `arch`, `catboost`, `lightgbm`, `filterpy`, `mapie`, `quantstats`, `nolds`) for statistical, volatility, and volume-spread audits.
 3. Conclude by calling the Round2Signal tool with your revised assessment:
    - `agent_name`: "{{ config.name }}"
    - `round`: 2

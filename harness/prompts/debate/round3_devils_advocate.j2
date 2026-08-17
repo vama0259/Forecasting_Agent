@@ -17,9 +17,11 @@ CRITICAL MANDATE — HARD DEVIL'S ADVOCATE ASSIGNMENT:
 You have been designated as the primary Devil's Advocate because your domain evidence is most opposed to the provisional {{ majority_direction | upper }} majority.
 You MUST aggressively challenge and stress-test the {{ majority_direction | upper }} thesis:
 - Identify unmodeled tail risks, regime shifts, liquidity traps, short-squeezes, or macro shocks that will cause the majority thesis to catastrophically fail.
+- You may execute Python code under /workspace/code/features/{{ config.workspaceSubpath }}/ to test counter-hypotheses (always load via `json.load(open('/workspace/bars.json'))`, using `arch` GARCH volatility, `statsmodels`, or `catboost`/`lightgbm`). Do NOT re-paste raw arrays.
 {% else %}
 ROUND 3 MANDATE:
 Stress-test your position against the Round 2 critiques and identify key invalidation triggers before final consensus.
+You may execute Python code to verify numbers (always load `/workspace/bars.json` dynamically, leveraging installed scientific libraries).
 {% endif %}
 
 TEMPORAL AS-OF BOUNDARY:
