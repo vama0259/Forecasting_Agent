@@ -190,7 +190,11 @@ async function runMultiAgentForecast({
     throw new Error(`MCP server configuration missing for capability 'market_data' (${serverName})`);
   }
   const mcpClient = new MultiServerMCPClient({ [serverName]: mcpConfig });
-  const tools: StructuredTool[] = await mcpClient.getTools();
+  const rawTools: StructuredTool[] = await mcpClient.getTools();
+  const tools: StructuredTool[] = rawTools.map((t) => {
+    (t as { handleToolErrors?: boolean }).handleToolErrors = true;
+    return t;
+  });
 
   let searchDegraded = false;
   let granted = 0;

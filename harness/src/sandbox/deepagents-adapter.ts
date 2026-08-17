@@ -15,10 +15,23 @@ export class SandboxBackendAdapter extends BaseSandbox {
   readonly #manager: SandboxManager;
 
   // Takes a SandboxManager and runId; returns an adapter scoped to that run's warm container.
-  constructor(manager: SandboxManager, runId: string) {
+  constructor(
+    managerOrOptions: SandboxManager | { sandboxManager?: SandboxManager; manager?: SandboxManager; runId: string },
+    runId?: string,
+  ) {
     super();
-    this.#manager = manager;
-    this.id = runId;
+    if (
+      typeof managerOrOptions === 'object' &&
+      managerOrOptions !== null &&
+      ('sandboxManager' in managerOrOptions || 'manager' in managerOrOptions)
+    ) {
+      const opts = managerOrOptions as { sandboxManager?: SandboxManager; manager?: SandboxManager; runId: string };
+      this.#manager = opts.sandboxManager ?? opts.manager!;
+      this.id = opts.runId;
+    } else {
+      this.#manager = managerOrOptions as SandboxManager;
+      this.id = runId ?? 'default-run';
+    }
   }
 
   // Takes Python source as code; returns its ExecuteResponse via the explore tier.

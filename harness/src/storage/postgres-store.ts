@@ -26,12 +26,18 @@ export interface DebateRoundRecord {
   payload: Record<string, unknown>;
 }
 
+export type PostgresStoreParam = PostgresStoreOptions | Pool;
+
 export class PostgresStore extends BaseStore {
   private pool: Pool;
 
-  constructor(options: PostgresStoreOptions) {
+  constructor(options: PostgresStoreParam) {
     super();
-    this.pool = options.pool;
+    if (typeof options === 'object' && options !== null && 'pool' in options && options.pool) {
+      this.pool = options.pool;
+    } else {
+      this.pool = options as Pool;
+    }
   }
 
   async saveDebateRound(record: DebateRoundRecord): Promise<void> {

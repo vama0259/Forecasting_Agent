@@ -12,6 +12,9 @@ Here are the Round 1 initial forecasts and evidence claims from all 4 participan
   Dissent note: {{ peer_signal.dissent | default("None") }}
 {% endfor %}
 
+TEMPORAL AS-OF BOUNDARY:
+The as-of date is strictly {{ as_of }}. Any data querying tools MUST NOT request dates after {{ as_of }}.
+
 YOUR ROUND 2 CROSS-EXAMINATION MANDATE:
 1. Cross-examine the other agents' claims against your domain data and knowledge.
    - For example: Are technical momentum signals ignoring institutional flow exhaustion? Is retail PCR overly optimistic? Is domestic absorption sufficient to offset foreign selling?
@@ -25,3 +28,5 @@ YOUR ROUND 2 CROSS-EXAMINATION MANDATE:
    - `probability_delta`: change from your Round 1 probability (e.g. +0.05 or -0.10)
    - `critiques`: list of targeted critique items for the other agents (target_agent, agreement_level, critique_point).
    - `evidence`: updated or reaffirmed evidence citations.
+
+IMPORTANT: You MUST conclude your turn by calling the Round2Signal structured response tool.

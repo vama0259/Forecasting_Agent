@@ -183,6 +183,11 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
     }
   };
 
+  const safeTools = (tools ?? []).map((t) => {
+    (t as { handleToolErrors?: boolean }).handleToolErrors = true;
+    return t;
+  });
+
   // ==========================================
   // ROUND 1: Initial Forecasts
   // ==========================================
@@ -221,7 +226,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
         const agent = buildParticipantAgent({
           config: agentCfg,
           llmConfig: config.llm,
-          tools,
+          tools: safeTools,
           backend,
           trace,
           schema: AgentSignalSchema,
@@ -304,7 +309,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
         const agent = buildParticipantAgent({
           config: agentCfg,
           llmConfig: config.llm,
-          tools,
+          tools: safeTools,
           backend,
           trace,
           schema: Round2SignalSchema,
@@ -403,7 +408,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
         const agent = buildParticipantAgent({
           config: agentCfg,
           llmConfig: config.llm,
-          tools,
+          tools: safeTools,
           backend,
           trace,
           schema: Round3SignalSchema,

@@ -22,6 +22,9 @@ ROUND 3 MANDATE:
 Stress-test your position against the Round 2 critiques and identify key invalidation triggers before final consensus.
 {% endif %}
 
+TEMPORAL AS-OF BOUNDARY:
+The as-of date is strictly {{ as_of }}. Any data querying tools MUST NOT request dates after {{ as_of }}.
+
 Conclude by calling the Round3Signal tool with your final positions:
 - `agent_name`: "{{ config.name }}"
 - `round`: 3
@@ -32,3 +35,5 @@ Conclude by calling the Round3Signal tool with your final positions:
 - `catastrophic_risks`: list of structural tail risks that threaten your thesis or market stability.
 - `invalidation_triggers`: explicit market price or flow levels that would completely invalidate this forecast.
 - `evidence`: final evidence items.
+
+IMPORTANT: You MUST conclude your turn by calling the Round3Signal structured response tool.
