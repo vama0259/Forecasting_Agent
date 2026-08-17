@@ -188,8 +188,22 @@ describe('multi-agent pipeline', () => {
     mockMcpClose.mockReset();
 
     mockCreateDeepAgent.mockImplementation(() => ({ invoke: mockInvoke }));
-    mockInvoke.mockResolvedValue({
-      structuredResponse: validPriceSignal,
+    mockInvoke.mockImplementation(async (input: { messages?: Array<{ content?: string }> }) => {
+      const content = input?.messages?.[0]?.content || '';
+      let agentName = 'price';
+      if (content.includes('Foreign Institutional Investor') || content.includes('fii')) {
+        agentName = 'fii';
+      } else if (content.includes('Domestic Institutional Investor') || content.includes('dii')) {
+        agentName = 'dii';
+      } else if (content.includes('Retail & Microstructure') || content.includes('retail')) {
+        agentName = 'retail';
+      }
+      return {
+        structuredResponse: {
+          ...validPriceSignal,
+          agent_name: agentName,
+        },
+      };
     });
     mockRunValidate.mockResolvedValue({
       evalResult: { verdict: 'PASS', layers: [], layer_means: {} },
@@ -226,7 +240,7 @@ describe('multi-agent pipeline', () => {
         langfuseHandler: mockCallbackHandler,
       });
 
-      expect(results).toHaveLength(1);
+      expect(results).toHaveLength(4);
       expect(results[0]).toEqual({
         agentName: 'price',
         signal: validPriceSignal,
@@ -251,7 +265,7 @@ describe('multi-agent pipeline', () => {
         langfuseHandler: mockCallbackHandler,
       });
 
-      expect(results).toHaveLength(1);
+      expect(results).toHaveLength(4);
       expect(results[0]).toEqual({
         agentName: 'price',
         signal: null,
@@ -264,7 +278,7 @@ describe('multi-agent pipeline', () => {
       mockInvoke.mockResolvedValue({
         structuredResponse: {
           ...validPriceSignal,
-          agent_name: 'fii', // mismatched identity
+          agent_name: 'fii', // mismatched identity for price agent
         },
       });
 
@@ -282,7 +296,7 @@ describe('multi-agent pipeline', () => {
         langfuseHandler: mockCallbackHandler,
       });
 
-      expect(results).toHaveLength(1);
+      expect(results).toHaveLength(4);
       expect(results[0]!.degraded).toBe(true);
       expect(results[0]!.signal).toBeNull();
       expect(results[0]!.error).toContain(
@@ -329,7 +343,7 @@ describe('multi-agent pipeline', () => {
         }),
       );
 
-      expect(mockSaveAgentSignal).toHaveBeenCalledTimes(1);
+      expect(mockSaveAgentSignal).toHaveBeenCalledTimes(4);
       expect(mockSaveAgentSignal).toHaveBeenCalledWith(
         mockPool,
         expect.objectContaining({
