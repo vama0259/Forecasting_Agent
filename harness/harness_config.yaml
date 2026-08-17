@@ -12,6 +12,11 @@ mcp_servers:
   market:
     command: bash
     args: ["-c", "cd ${REPO_ROOT} && exec uv run python -m forecasting_agent.data_server.server"]
+    env:
+      ANGELONE_API_KEY: ${ANGELONE_API_KEY}
+      ANGELONE_CLIENT_CODE: ${ANGELONE_CLIENT_CODE}
+      ANGELONE_MPIN: ${ANGELONE_MPIN}
+      ANGELONE_TOTP_SECRET: ${ANGELONE_TOTP_SECRET}
 
 capabilities:
   chat: llm
@@ -43,5 +48,6 @@ search:
     - bseindia.com
     - nseindia.com
 
-sandbox: {}
+sandbox:
+  timeoutMs: 120000
 eval: {}

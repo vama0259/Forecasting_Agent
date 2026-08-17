@@ -62,7 +62,11 @@ const searchCapability = new AnySearchCapability({
 
 const registry = new CapabilityRegistry();
 registry.register('search', searchCapability);
-await registry.validateAll();
+// validateAll's 5s default is tuned for a local probe; AnySearch is a remote SSE endpoint whose
+// handshake intermittently runs past it, and a failed probe aborts the whole forecast -- including
+// price-only runs that never call search. Give the remote one room rather than lose a sweep symbol
+// to a slow handshake. (The underlying all-or-nothing coupling is a real design gap, not fixed here.)
+await registry.validateAll({ timeoutMs: 30_000 });
 
 // Takes nothing; returns this process's RSS/heap footprint as a short log-friendly string.
 function memSnapshot(): string {

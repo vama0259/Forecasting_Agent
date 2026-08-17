@@ -1,0 +1,762 @@
+{
+  "signal": {
+    "direction": "up",
+    "probability": 0.55,
+    "confidence": 0.4,
+    "horizon_days": 21,
+    "evidence": [
+      "RELIANCE fell ~3.2% over window (1363.3 to 1320.0) after May peak near 1447, broad downtrend",
+      "Multi-month base ~1260-1335 since June; July lows (~1268) held above June lows (~1259), higher-low structure",
+      "August bounce off 1280 low (Aug 5) to 1334.8 (Aug 7), consolidating 1310-1335 above the base",
+      "Walk-forward model mildly bearish: mean daily return -0.03%, only 37/85 buy days - weak downside drift",
+      "Resistance at ~1330-1345; sustained close above ~1345 would confirm upside",
+      "Dissent: failure to hold 1300-1310 opens path back to ~1260 base, capping conviction"
+    ],
+    "dissent": "Range-bound chop with negative drift; a break below 1300-1310 support could resume the downtrend toward the ~1260 base, so this is a modest mean-reversion call, not a confirmed reversal."
+  },
+  "evalResult": {
+    "verdict": {
+      "status": "VALID",
+      "reasons": [],
+      "folds": [
+        {
+          "train_idx": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13
+          ],
+          "test_idx": [
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28
+          ],
+          "fold_number": 0
+        },
+        {
+          "train_idx": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "test_idx": [
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42
+          ],
+          "fold_number": 1
+        },
+        {
+          "train_idx": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41
+          ],
+          "test_idx": [
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56
+          ],
+          "fold_number": 2
+        },
+        {
+          "train_idx": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55
+          ],
+          "test_idx": [
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
+            70
+          ],
+          "fold_number": 3
+        },
+        {
+          "train_idx": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69
+          ],
+          "test_idx": [
+            71,
+            72,
+            73,
+            74,
+            75,
+            76,
+            77,
+            78,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84
+          ],
+          "fold_number": 4
+        }
+      ],
+      "skipped": []
+    },
+    "layers": [
+      {
+        "layer": 1,
+        "fold_number": 0,
+        "value": 1.0152381177764125,
+        "calibration_bins": null,
+        "note": null,
+        "zero_forecast_mase": 0.9184458949429483,
+        "beats_zero": false,
+        "annualized": null
+      },
+      {
+        "layer": 2,
+        "fold_number": 0,
+        "value": 0.2365685720313802,
+        "calibration_bins": [
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 5,
+            "mean_predicted": 0.25245499025654194,
+            "mean_observed": 0.4
+          },
+          {
+            "count": 2,
+            "mean_predicted": 0.3239876423523253,
+            "mean_observed": 0
+          },
+          {
+            "count": 3,
+            "mean_predicted": 0.4786498427327914,
+            "mean_observed": 0.3333333333333333
+          },
+          {
+            "count": 4,
+            "mean_predicted": 0.5493428878279019,
+            "mean_observed": 0.25
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          }
+        ],
+        "note": null,
+        "zero_forecast_mase": null,
+        "beats_zero": null,
+        "annualized": null
+      },
+      {
+        "layer": 3,
+        "fold_number": 0,
+        "value": -0.2955057976320196,
+        "calibration_bins": null,
+        "note": null,
+        "zero_forecast_mase": null,
+        "beats_zero": null,
+        "annualized": false
+      },
+      {
+        "layer": 1,
+        "fold_number": 1,
+        "value": 0.5919356613534523,
+        "calibration_bins": null,
+        "note": null,
+        "zero_forecast_mase": 0.5742738186213838,
+        "beats_zero": false,
+        "annualized": null
+      },
+      {
+        "layer": 2,
+        "fold_number": 1,
+        "value": 0.18673445562136656,
+        "calibration_bins": [
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 3,
+            "mean_predicted": 0.2746185808742691,
+            "mean_observed": 0.3333333333333333
+          },
+          {
+            "count": 7,
+            "mean_predicted": 0.35696843386354565,
+            "mean_observed": 0.14285714285714285
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 2,
+            "mean_predicted": 0.6509155781080377,
+            "mean_observed": 1
+          },
+          {
+            "count": 2,
+            "mean_predicted": 0.7359489890442528,
+            "mean_observed": 0.5
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          }
+        ],
+        "note": null,
+        "zero_forecast_mase": null,
+        "beats_zero": null,
+        "annualized": null
+      },
+      {
+        "layer": 3,
+        "fold_number": 1,
+        "value": 1.281312759042958,
+        "calibration_bins": null,
+        "note": null,
+        "zero_forecast_mase": null,
+        "beats_zero": null,
+        "annualized": false
+      },
+      {
+        "layer": 1,
+        "fold_number": 2,
+        "value": 0.8079687515226832,
+        "calibration_bins": null,
+        "note": null,
+        "zero_forecast_mase": 0.7108899026959712,
+        "beats_zero": false,
+        "annualized": null
+      },
+      {
+        "layer": 2,
+        "fold_number": 2,
+        "value": 0.2925525787381669,
+        "calibration_bins": [
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 2,
+            "mean_predicted": 0.38495886388003614,
+            "mean_observed": 0.5
+          },
+          {
+            "count": 6,
+            "mean_predicted": 0.4757173375504205,
+            "mean_observed": 0.8333333333333334
+          },
+          {
+            "count": 4,
+            "mean_predicted": 0.5362016203734641,
+            "mean_observed": 0
+          },
+          {
+            "count": 2,
+            "mean_predicted": 0.6193776020815772,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          }
+        ],
+        "note": null,
+        "zero_forecast_mase": null,
+        "beats_zero": null,
+        "annualized": null
+      },
+      {
+        "layer": 3,
+        "fold_number": 2,
+        "value": -0.5789991246475477,
+        "calibration_bins": null,
+        "note": null,
+        "zero_forecast_mase": null,
+        "beats_zero": null,
+        "annualized": false
+      },
+      {
+        "layer": 1,
+        "fold_number": 3,
+        "value": 0.803490801038468,
+        "calibration_bins": null,
+        "note": null,
+        "zero_forecast_mase": 0.6395827942196047,
+        "beats_zero": false,
+        "annualized": null
+      },
+      {
+        "layer": 2,
+        "fold_number": 3,
+        "value": 0.32627019334439955,
+        "calibration_bins": [
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 1,
+            "mean_predicted": 0.2772892524164601,
+            "mean_observed": 1
+          },
+          {
+            "count": 4,
+            "mean_predicted": 0.35932789482369004,
+            "mean_observed": 0.75
+          },
+          {
+            "count": 5,
+            "mean_predicted": 0.47056262162959,
+            "mean_observed": 0.4
+          },
+          {
+            "count": 1,
+            "mean_predicted": 0.5057247435504617,
+            "mean_observed": 1
+          },
+          {
+            "count": 2,
+            "mean_predicted": 0.6123196732684983,
+            "mean_observed": 0
+          },
+          {
+            "count": 1,
+            "mean_predicted": 0.7074066054050717,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          }
+        ],
+        "note": null,
+        "zero_forecast_mase": null,
+        "beats_zero": null,
+        "annualized": null
+      },
+      {
+        "layer": 3,
+        "fold_number": 3,
+        "value": -0.10189736830701719,
+        "calibration_bins": null,
+        "note": null,
+        "zero_forecast_mase": null,
+        "beats_zero": null,
+        "annualized": false
+      },
+      {
+        "layer": 1,
+        "fold_number": 4,
+        "value": 0.8783162594230609,
+        "calibration_bins": null,
+        "note": null,
+        "zero_forecast_mase": 0.8132729949170295,
+        "beats_zero": false,
+        "annualized": null
+      },
+      {
+        "layer": 2,
+        "fold_number": 4,
+        "value": 0.2892108495460514,
+        "calibration_bins": [
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 2,
+            "mean_predicted": 0.3761435874327145,
+            "mean_observed": 1
+          },
+          {
+            "count": 4,
+            "mean_predicted": 0.4530957313825333,
+            "mean_observed": 0.5
+          },
+          {
+            "count": 3,
+            "mean_predicted": 0.5745695270897088,
+            "mean_observed": 0.6666666666666666
+          },
+          {
+            "count": 3,
+            "mean_predicted": 0.6580632759432256,
+            "mean_observed": 0.3333333333333333
+          },
+          {
+            "count": 2,
+            "mean_predicted": 0.7164010742199214,
+            "mean_observed": 0.5
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          },
+          {
+            "count": 0,
+            "mean_predicted": 0,
+            "mean_observed": 0
+          }
+        ],
+        "note": null,
+        "zero_forecast_mase": null,
+        "beats_zero": null,
+        "annualized": null
+      },
+      {
+        "layer": 3,
+        "fold_number": 4,
+        "value": -0.1721033396145691,
+        "calibration_bins": null,
+        "note": null,
+        "zero_forecast_mase": null,
+        "beats_zero": null,
+        "annualized": false
+      }
+    ],
+    "layer_means": {
+      "1": {
+        "mean": 0.8193899182228155,
+        "n_folds": 5
+      },
+      "2": {
+        "mean": 0.2662673298562729,
+        "n_folds": 5
+      },
+      "3": {
+        "mean": 0.026561425768360885,
+        "n_folds": 5
+      }
+    }
+  }
+}

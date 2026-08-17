@@ -74,7 +74,7 @@ vi.mock('../../src/tracing/correlation.js', () => ({
 
 const config: HarnessConfig = {
   llm: { provider: 'deepseek', model: 'deepseek-chat', api_key: 'sk-test' },
-  mcp_servers: { market: { command: 'node', args: ['server.js'] } },
+  mcp_servers: { market: { command: 'node', args: ['server.js'], env: {} } },
   capabilities: { chat: 'llm', search: 'llm', sentiment: 'llm', market_data: 'market' },
   storage: { connection_string: 'postgres://x' },
   tracing: { langfuse_public_key: 'pk', langfuse_secret_key: 'sk', langfuse_base_url: 'http://x' },

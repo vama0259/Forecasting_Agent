@@ -29,7 +29,7 @@ type ResolvedSandboxConfig = {
 
 const DEFAULTS: ResolvedSandboxConfig = {
   concurrency: 2,
-  timeoutMs: 45_000,
+  timeoutMs: 120_000,
   stdioBufferBytes: 50 * 1024,
   idleReaperMs: 10 * 60_000,
   memoryLimitBytes: 512 * 1024 * 1024,

@@ -79,3 +79,7 @@ graphify-out/
 docs/vault
 docs/vault/
 harness/.sandbox-test-tmp/
+
+# Sandbox scratch pulled back out of the container by a run. Agent-authored, never hand-edited,
+# and it fails `ruff check .` on every sweep -- keep it out of the tree and out of the linter.
+artifacts/

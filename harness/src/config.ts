@@ -12,6 +12,10 @@ export const CapabilitiesSchema = z.object({
 const StdioMcpServerSchema = z.object({
   command: z.string().min(1),
   args: z.array(z.string()).default([]),
+  // The MCP stdio client only inherits a fixed allowlist (PATH, HOME, ...), so anything the
+  // server itself needs -- broker credentials, for one -- has to be handed over explicitly or
+  // the server starts up credential-less and silently degrades to its fallback data source.
+  env: z.record(z.string(), z.string()).default({}),
 });
 
 const HttpMcpServerSchema = z.object({

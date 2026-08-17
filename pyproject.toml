@@ -46,7 +46,7 @@ python-preference = "only-managed"
 [tool.ruff]
 target-version = "py312"
 line-length = 120
-extend-exclude = [".codex", ".agents", ".claude"]
+extend-exclude = [".codex", ".agents", ".claude", "artifacts"]
 
 [tool.ruff.lint]
 select = [
@@ -70,6 +70,8 @@ ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S105", "S106"]
+# Reporting CLIs: stdout is the deliverable, not a stray debug print.
+"scripts/*" = ["T201"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["forecasting_agent"]

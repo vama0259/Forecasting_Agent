@@ -14,6 +14,10 @@ const env = {
   LANGFUSE_PUBLIC_KEY: 'a',
   LANGFUSE_SECRET_KEY: 'b',
   LANGFUSE_BASE_URL: 'http://x',
+  ANGELONE_API_KEY: 'angelone-api-key',
+  ANGELONE_CLIENT_CODE: 'angelone-client-code',
+  ANGELONE_MPIN: 'angelone-mpin',
+  ANGELONE_TOTP_SECRET: 'angelone-totp-secret',
 };
 
 describe('harness_config.yaml is loadable by the real entrypoint', () => {
@@ -22,6 +26,20 @@ describe('harness_config.yaml is loadable by the real entrypoint', () => {
     expect(config.capabilities.search).toBe('anysearch');
     expect(config.mcp_servers.anysearch).toBeDefined();
     expect(config.mcp_servers.market).toBeDefined();
+  });
+
+  // The MCP stdio client only inherits a fixed allowlist, so credentials reach the market-data
+  // server solely through this env block. Without it the server starts credential-less and
+  // silently serves stale fallback data instead of failing -- assert the values actually land.
+  it('hands the market-data server its broker credentials', () => {
+    const market = loadConfig('harness_config.yaml', env).mcp_servers.market;
+    expect(market).toBeDefined();
+    expect('env' in market! ? market.env : undefined).toMatchObject({
+      ANGELONE_API_KEY: 'angelone-api-key',
+      ANGELONE_CLIENT_CODE: 'angelone-client-code',
+      ANGELONE_MPIN: 'angelone-mpin',
+      ANGELONE_TOTP_SECRET: 'angelone-totp-secret',
+    });
   });
 
   it('fails loudly when a capability points at an undefined server', () => {

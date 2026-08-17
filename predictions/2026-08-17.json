@@ -1,0 +1,270 @@
+{
+  "as_of": "2026-08-17",
+  "symbols": {
+    "RELIANCE.NS": {
+      "last_close": 1320.0,
+      "last_bar": "2026-08-17",
+      "models": {
+        "drift": {
+          "expected_return": -0.00030404073209847613,
+          "prob_up": 0.43529411764705883,
+          "direction": "down"
+        },
+        "ewma_0.3": {
+          "expected_return": 0.0006859968483480165,
+          "prob_up": 0.43529411764705883,
+          "direction": "down"
+        },
+        "naive": {
+          "expected_return": 0.007633587786259542,
+          "prob_up": 0.5,
+          "direction": "flat"
+        },
+        "zero": {
+          "expected_return": 0.0,
+          "prob_up": 0.5,
+          "direction": "flat"
+        }
+      }
+    },
+    "TCS.NS": {
+      "last_close": 2314.9,
+      "last_bar": "2026-08-17",
+      "models": {
+        "drift": {
+          "expected_return": -0.0010417020956553333,
+          "prob_up": 0.43529411764705883,
+          "direction": "down"
+        },
+        "ewma_0.3": {
+          "expected_return": -0.008683420163016476,
+          "prob_up": 0.43529411764705883,
+          "direction": "down"
+        },
+        "naive": {
+          "expected_return": -0.019525624735281622,
+          "prob_up": 0.5,
+          "direction": "flat"
+        },
+        "zero": {
+          "expected_return": 0.0,
+          "prob_up": 0.5,
+          "direction": "flat"
+        },
+        "agent_price": {
+          "expected_return": null,
+          "prob_up": 0.42,
+          "direction": "down"
+        }
+      }
+    },
+    "HDFCBANK.NS": {
+      "last_close": 731.35,
+      "last_bar": "2026-08-17",
+      "models": {
+        "drift": {
+          "expected_return": -0.0008947919775759185,
+          "prob_up": 0.38823529411764707,
+          "direction": "down"
+        },
+        "ewma_0.3": {
+          "expected_return": 0.0008460561960020102,
+          "prob_up": 0.38823529411764707,
+          "direction": "down"
+        },
+        "naive": {
+          "expected_return": 0.005983493810178848,
+          "prob_up": 0.5,
+          "direction": "flat"
+        },
+        "zero": {
+          "expected_return": 0.0,
+          "prob_up": 0.5,
+          "direction": "flat"
+        }
+      }
+    },
+    "INFY.NS": {
+      "last_close": 1136.1,
+      "last_bar": "2026-08-17",
+      "models": {
+        "drift": {
+          "expected_return": -0.0014906322422763394,
+          "prob_up": 0.4,
+          "direction": "down"
+        },
+        "ewma_0.3": {
+          "expected_return": -0.009402898715732577,
+          "prob_up": 0.4,
+          "direction": "down"
+        },
+        "naive": {
+          "expected_return": -0.028309955525145515,
+          "prob_up": 0.5,
+          "direction": "flat"
+        },
+        "zero": {
+          "expected_return": 0.0,
+          "prob_up": 0.5,
+          "direction": "flat"
+        }
+      }
+    },
+    "ICICIBANK.NS": {
+      "last_close": 1419.6,
+      "last_bar": "2026-08-17",
+      "models": {
+        "drift": {
+          "expected_return": 0.0006001945143419882,
+          "prob_up": 0.5411764705882353,
+          "direction": "up"
+        },
+        "ewma_0.3": {
+          "expected_return": -0.0009689651008874225,
+          "prob_up": 0.5411764705882353,
+          "direction": "up"
+        },
+        "naive": {
+          "expected_return": 0.0018348623853210368,
+          "prob_up": 0.5,
+          "direction": "flat"
+        },
+        "zero": {
+          "expected_return": 0.0,
+          "prob_up": 0.5,
+          "direction": "flat"
+        }
+      }
+    },
+    "HINDUNILVR.NS": {
+      "last_close": 2068.0,
+      "last_bar": "2026-08-17",
+      "models": {
+        "drift": {
+          "expected_return": -0.0007974399312500468,
+          "prob_up": 0.4117647058823529,
+          "direction": "down"
+        },
+        "ewma_0.3": {
+          "expected_return": -0.001834146931252945,
+          "prob_up": 0.4117647058823529,
+          "direction": "down"
+        },
+        "naive": {
+          "expected_return": -0.004333172845450169,
+          "prob_up": 0.5,
+          "direction": "flat"
+        },
+        "zero": {
+          "expected_return": 0.0,
+          "prob_up": 0.5,
+          "direction": "flat"
+        }
+      }
+    },
+    "BHARTIARTL.NS": {
+      "last_close": 1975.0,
+      "last_bar": "2026-08-17",
+      "models": {
+        "drift": {
+          "expected_return": 0.0008758306532654958,
+          "prob_up": 0.5176470588235295,
+          "direction": "up"
+        },
+        "ewma_0.3": {
+          "expected_return": 0.0028727758908395607,
+          "prob_up": 0.5176470588235295,
+          "direction": "up"
+        },
+        "naive": {
+          "expected_return": -0.008583906430400036,
+          "prob_up": 0.5,
+          "direction": "flat"
+        },
+        "zero": {
+          "expected_return": 0.0,
+          "prob_up": 0.5,
+          "direction": "flat"
+        }
+      }
+    },
+    "KOTAKBANK.NS": {
+      "last_close": 395.5,
+      "last_bar": "2026-08-17",
+      "models": {
+        "drift": {
+          "expected_return": 0.0005647960826413833,
+          "prob_up": 0.5529411764705883,
+          "direction": "up"
+        },
+        "ewma_0.3": {
+          "expected_return": 0.0026456387165599096,
+          "prob_up": 0.5529411764705883,
+          "direction": "up"
+        },
+        "naive": {
+          "expected_return": 0.011121053304359,
+          "prob_up": 0.5,
+          "direction": "flat"
+        },
+        "zero": {
+          "expected_return": 0.0,
+          "prob_up": 0.5,
+          "direction": "flat"
+        }
+      }
+    },
+    "LT.NS": {
+      "last_close": 4076.0,
+      "last_bar": "2026-08-17",
+      "models": {
+        "drift": {
+          "expected_return": 0.0001357713610596654,
+          "prob_up": 0.4588235294117647,
+          "direction": "down"
+        },
+        "ewma_0.3": {
+          "expected_return": 0.002100039143944973,
+          "prob_up": 0.4588235294117647,
+          "direction": "down"
+        },
+        "naive": {
+          "expected_return": 0.004683263495193493,
+          "prob_up": 0.5,
+          "direction": "flat"
+        },
+        "zero": {
+          "expected_return": 0.0,
+          "prob_up": 0.5,
+          "direction": "flat"
+        }
+      }
+    },
+    "SBIN.NS": {
+      "last_close": 1065.0,
+      "last_bar": "2026-08-17",
+      "models": {
+        "drift": {
+          "expected_return": -0.0003847618253697615,
+          "prob_up": 0.47058823529411764,
+          "direction": "down"
+        },
+        "ewma_0.3": {
+          "expected_return": -0.001838045324169868,
+          "prob_up": 0.47058823529411764,
+          "direction": "down"
+        },
+        "naive": {
+          "expected_return": -0.0025288002247822847,
+          "prob_up": 0.5,
+          "direction": "flat"
+        },
+        "zero": {
+          "expected_return": 0.0,
+          "prob_up": 0.5,
+          "direction": "flat"
+        }
+      }
+    }
+  }
+}
