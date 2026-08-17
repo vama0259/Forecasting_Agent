@@ -1,0 +1,28 @@
+{% import "_macros.j2" as macros %}
+Produce a price-direction forecast for {{ symbol }} (NSE) as of {{ as_of }}.
+
+1. Call the market data tool: fetch_ohlcv(symbol="{{ symbol }}", market="NSE", start="{{ start_date }}", end="{{ as_of }}", as_of="{{ as_of }}").
+   It returns {symbol, market, bars: [{date, open, high, low, close, volume}, ...], data_stale}, oldest bar first.
+   Immediately use write_file to save that exact tool result to /workspace/bars.json. Do this
+   once, right after fetching -- do NOT retype, re-paste, or hand-copy any dates/prices from the
+   tool output into a script anywhere below; always load them back with
+   `json.load(open('/workspace/bars.json'))`.
+
+2. In Python (under {{ workspace_path }}), compute price features and a walk-forward backtest:
+   - returns[i] = (close[i] - close[i-1]) / close[i-1] for each consecutive pair of bars.
+   - forecasts[i] = predicted return for day i.
+   - calls[i] = predicted probability (0.0-1.0) that returns[i] is positive.
+   - timestamps[i] = that bar's date as an ISO-8601 datetime with a timezone.
+   - trade_side[i] = "buy" if calls[i] > 0.5, else "hold".
+   - position_notional[i] = 10000.0 when trade_side[i] is "buy", else 0.0.
+
+3. {{ macros.eval_contract(symbol, as_of) }}
+
+4. Separately, as your structured final response, give your own overall forecast for {{ symbol }}
+   over the next {{ horizon_days }} day:
+   - `agent_name`: "price"
+   - `direction`: "up" or "down"
+   - `probability`: 0.0 to 1.0
+   - `confidence`: 0.0 to 1.0
+   - `horizon_days`: 1
+   - `evidence`: list of observations citing `source_capability: "market_data"` or `"macro"`.
