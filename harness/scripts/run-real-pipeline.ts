@@ -37,7 +37,7 @@ const searchMcpClient = new MultiServerMCPClient({ [searchServerName]: searchMcp
 const redisClient = createRedisClient(config.redis.url);
 
 const ledger = new SearchBudgetLedger(redisClient, {
-  dailyCap: config.search.daily_quota_cap,
+  dailyCap: config.search.daily_cap,
   runTtlSeconds: config.search.run_ttl_seconds,
 });
 const cache = new RunScopedSearchCache(redisClient, {
