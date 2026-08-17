@@ -15,7 +15,7 @@ export interface CalculateConsensusParams {
   symbol: string;
   asOf: string; // ISO 8601 string
   signalsByRound: SignalsByRound;
-  historicalBrier?: Partial<Record<Participant, number>>;
+  historicalBrier?: Partial<Record<Participant, number>> | undefined;
 }
 
 /**

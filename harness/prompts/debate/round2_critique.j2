@@ -1,0 +1,27 @@
+You are the {{ config.roleTitle }} (agent_name: "{{ config.name }}") for {{ symbol }} as of {{ as_of }}.
+
+In Round 1, you gave an initial forecast of {{ round1_signal.direction | upper }} (probability: {{ round1_signal.probability }}, confidence: {{ round1_signal.confidence }}).
+
+Here are the Round 1 initial forecasts and evidence claims from all 4 participant agents:
+{% for peer_name, peer_signal in peer_signals %}
+- [{{ peer_name | upper }}]: Direction={{ peer_signal.direction | upper }}, Prob={{ peer_signal.probability }}, Conf={{ peer_signal.confidence }}
+  Evidence:
+  {% for ev in peer_signal.evidence %}
+  • "{{ ev.claim }}" (Source: {{ ev.source_capability }}, Value: {{ ev.value | string }})
+  {% endfor %}
+  Dissent note: {{ peer_signal.dissent | default("None") }}
+{% endfor %}
+
+YOUR ROUND 2 CROSS-EXAMINATION MANDATE:
+1. Cross-examine the other agents' claims against your domain data and knowledge.
+   - For example: Are technical momentum signals ignoring institutional flow exhaustion? Is retail PCR overly optimistic? Is domestic absorption sufficient to offset foreign selling?
+2. You may execute Python code under /workspace/code/features/{{ config.workspaceSubpath }}/ to cross-check figures.
+3. Conclude by calling the Round2Signal tool with your revised assessment:
+   - `agent_name`: "{{ config.name }}"
+   - `round`: 2
+   - `direction`: "up" or "down" (binary only)
+   - `probability`: updated calibrated probability (0.0 to 1.0)
+   - `confidence`: updated confidence (0.0 to 1.0)
+   - `probability_delta`: change from your Round 1 probability (e.g. +0.05 or -0.10)
+   - `critiques`: list of targeted critique items for the other agents (target_agent, agreement_level, critique_point).
+   - `evidence`: updated or reaffirmed evidence citations.

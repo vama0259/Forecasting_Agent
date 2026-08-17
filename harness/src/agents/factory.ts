@@ -11,22 +11,32 @@ import type { HarnessConfig } from '../config.js';
 import type { CompositeBackend } from 'deepagents';
 import type { TraceHandle } from '../tracing/langfuse.js';
 
+import type { z } from 'zod';
+
 export interface BuildParticipantAgentParams {
   config: ParticipantAgentConfig;
   llmConfig: HarnessConfig['llm'];
   tools: StructuredTool[];
   backend: CompositeBackend;
-  trace?: TraceHandle;
+  trace?: TraceHandle | undefined;
+  schema?: z.ZodTypeAny | undefined;
 }
 
-export function buildParticipantAgent({ config, llmConfig, tools, backend, trace }: BuildParticipantAgentParams) {
+export function buildParticipantAgent({
+  config,
+  llmConfig,
+  tools,
+  backend,
+  trace,
+  schema,
+}: BuildParticipantAgentParams) {
   const filteredTools = tools.filter((t) => config.tools.includes(t.name));
 
   return createDeepAgent({
     model: buildDeepSeekModel(llmConfig),
     tools: filteredTools,
     backend,
-    responseFormat: toolStrategy(AgentSignalSchema),
+    responseFormat: toolStrategy(schema ?? AgentSignalSchema),
     middleware: [
       deepSeekAutoToolChoiceMiddleware,
       buildCostBudgetMiddleware(config.maxTokenBudget),

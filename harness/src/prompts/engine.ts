@@ -36,3 +36,46 @@ export function renderPrompt(config: ParticipantAgentConfig, context: PromptCont
     workspace_path: `/workspace/code/features/${config.workspaceSubpath}/`,
   });
 }
+
+import type { AgentSignal } from '../agents/schema.js';
+import type { Round2Signal } from '../debate/types.js';
+
+export interface Round2PromptParams {
+  config: ParticipantAgentConfig;
+  symbol: string;
+  as_of: string;
+  round1_signal: AgentSignal;
+  peer_signals: Record<string, AgentSignal>;
+}
+
+export function renderRound2Prompt(params: Round2PromptParams): string {
+  return env.render('debate/round2_critique.j2', {
+    config: params.config,
+    symbol: params.symbol,
+    as_of: params.as_of,
+    round1_signal: params.round1_signal,
+    peer_signals: params.peer_signals,
+  });
+}
+
+export interface Round3PromptParams {
+  config: ParticipantAgentConfig;
+  symbol: string;
+  as_of: string;
+  majority_direction: 'up' | 'down';
+  avg_p_up: number;
+  peer_r2_signals: Record<string, Round2Signal>;
+  is_devils_advocate: boolean;
+}
+
+export function renderRound3Prompt(params: Round3PromptParams): string {
+  return env.render('debate/round3_devils_advocate.j2', {
+    config: params.config,
+    symbol: params.symbol,
+    as_of: params.as_of,
+    majority_direction: params.majority_direction,
+    avg_p_up: params.avg_p_up,
+    peer_r2_signals: params.peer_r2_signals,
+    is_devils_advocate: params.is_devils_advocate,
+  });
+}
