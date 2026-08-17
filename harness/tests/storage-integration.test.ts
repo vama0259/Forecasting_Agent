@@ -3,7 +3,10 @@ import { Pool } from 'pg';
 import { runMigrations } from '../src/storage/migrator.js';
 import { saveForecast, queryMemory } from '../src/storage/repository.js';
 
-const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://localhost:5432/harness_test';
+const TEST_DB_URL =
+  process.env.TEST_DATABASE_URL ??
+  process.env.STORAGE_CONNECTION_STRING ??
+  'postgresql://harness:harness@localhost:5432/harness';
 
 describe('full storage integration', () => {
   beforeEach(async () => {
