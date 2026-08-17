@@ -16,7 +16,7 @@ const env = new nunjucks.Environment(new nunjucks.FileSystemLoader(PROMPTS_DIR),
 export interface PromptContext {
   symbol: string;
   as_of: string;
-  horizon_days: number;
+  horizon_days?: number;
   start_date?: string;
   [key: string]: unknown;
 }
@@ -27,6 +27,7 @@ export function renderPrompt(config: ParticipantAgentConfig, context: PromptCont
     new Date(new Date(context.as_of).getTime() - 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   return env.render(config.promptTemplate, {
+    horizon_days: context.horizon_days ?? config.horizon_days,
     ...context,
     start_date,
     agent_name: config.name,

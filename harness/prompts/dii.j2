@@ -1,0 +1,25 @@
+Produce a Domestic Institutional Investor (DII) intent forecast for {{ symbol }} (NSE) as of {{ as_of }}.
+
+1. Call the market tools:
+   a. fetch_flows(observed_on="{{ as_of }}", as_of="{{ as_of }}")
+      Immediately save the exact result using write_file to /workspace/flows.json.
+   b. fetch_ohlcv(symbol="{{ symbol }}", market="NSE", start="{{ start_date }}", end="{{ as_of }}", as_of="{{ as_of }}")
+      Immediately save the exact result using write_file to /workspace/bars.json.
+
+2. In Python (under /workspace/code/features/dii/), write an analysis script (e.g. `dii_features.py`):
+   - Calculate DII Index Futures Long/Short ratio:
+     dii_long = DII record's future_index_long
+     dii_short = DII record's future_index_short
+     dii_ratio = dii_long / max(1, dii_short)
+   - Evaluate DII absorption capacity: is domestic liquidity providing a price floor on {{ symbol }} against foreign selling?
+   - If flows data is empty (e.g. holiday or weekend), handle gracefully with explicit_absence: true.
+   - Run the script in the sandbox via execute to verify the indicators.
+
+3. Separately, as your structured final response, give your overall DII intent forecast for {{ symbol }} over the next {{ horizon_days }} day:
+   - `agent_name`: "dii"
+   - `direction`: "up" or "down" (binary only)
+   - `probability`: 0.0 to 1.0
+   - `confidence`: 0.0 to 1.0
+   - `horizon_days`: 1
+   - `evidence`: list of observations citing `source_capability: "flows"` or `"market_data"`.
+   - `dissent`: optional domestic liquidity caveat or macro constraint.

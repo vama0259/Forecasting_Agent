@@ -1,0 +1,27 @@
+Produce a Foreign Institutional Investor (FII) intent forecast for {{ symbol }} (NSE) as of {{ as_of }}.
+
+1. Call the market tools:
+   a. fetch_flows(observed_on="{{ as_of }}", as_of="{{ as_of }}")
+      Returns participant-wise derivative flow records: [{observed_on, participant, future_index_long, future_index_short, future_stock_long, future_stock_short, ...}, ...].
+      Immediately save the exact result using write_file to /workspace/flows.json.
+   b. fetch_ohlcv(symbol="{{ symbol }}", market="NSE", start="{{ start_date }}", end="{{ as_of }}", as_of="{{ as_of }}")
+      Immediately save the exact result using write_file to /workspace/bars.json.
+
+2. In Python (under /workspace/code/features/fii/), write an analysis script (e.g. `fii_features.py`) to inspect the flow data:
+   - Calculate FII Index Futures Long/Short ratio:
+     fii_long = FII record's future_index_long
+     fii_short = FII record's future_index_short
+     long_short_ratio = fii_long / max(1, fii_short)
+   - Calculate FII Net Stock Futures vs Index Futures stance.
+   - Note: NSE FII flow data is market-wide, not stock-specific (ADR-023). Analyze {{ symbol }} price action in the context of institutional risk-on or risk-off positioning.
+   - If flows data is empty (e.g. holiday or weekend), handle gracefully with explicit_absence: true.
+   - Run the script in the sandbox via execute to verify the indicators.
+
+3. Separately, as your structured final response, give your overall FII intent forecast for {{ symbol }} over the next {{ horizon_days }} day:
+   - `agent_name`: "fii"
+   - `direction`: "up" or "down" (binary only)
+   - `probability`: 0.0 to 1.0 (calibrated probability that {{ symbol }} advances)
+   - `confidence`: 0.0 to 1.0
+   - `horizon_days`: 1
+   - `evidence`: list of observations citing `source_capability: "flows"` or `"market_data"`.
+   - `dissent`: optional counter-argument or institutional positioning nuance.

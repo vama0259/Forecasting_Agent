@@ -1,0 +1,31 @@
+Produce a Retail & Microstructure intent forecast for {{ symbol }} (NSE) as of {{ as_of }}.
+
+1. Call the microstructure & derivatives tools:
+   a. fetch_microstructure(observed_on="{{ as_of }}", as_of="{{ as_of }}")
+      Returns {observed_on, delivery: [{symbol, series, quantity_traded, deliverable_quantity, delivery_pct}, ...], bulk_deals: [...], block_deals: [...]}.
+      Immediately save to /workspace/microstructure.json.
+   b. fetch_option_chain(underlying="{{ symbol }}", as_of="{{ as_of }}")
+      Immediately save to /workspace/option_chain.json.
+   c. fetch_ohlcv(symbol="{{ symbol }}", market="NSE", start="{{ start_date }}", end="{{ as_of }}", as_of="{{ as_of }}")
+      Immediately save to /workspace/bars.json.
+
+2. In Python (under /workspace/code/features/retail/), write an analysis script (e.g. `retail_features.py`):
+   - Extract delivery percentage for {{ symbol }}:
+     delivery_pct = deliverable_quantity / max(1, quantity_traded) * 100
+     High delivery (>50%) on price increases signals genuine accumulation; low delivery (<25%) indicates retail churn.
+   - Calculate Put-Call Ratio (PCR) from option chain:
+     total_put_oi = sum(s.put_oi for s in strikes)
+     total_call_oi = sum(s.call_oi for s in strikes)
+     pcr = total_put_oi / max(1, total_call_oi)
+   - Inspect Bulk/Block deals for institutional footprint.
+   - If microstructure or option chain data is empty (e.g. holiday, weekend, or illiquid strikes), handle gracefully with explicit_absence: true.
+   - Run the script in the sandbox via execute to verify the indicators.
+
+3. Separately, as your structured final response, give your overall Retail & Microstructure forecast for {{ symbol }} over the next {{ horizon_days }} day:
+   - `agent_name`: "retail"
+   - `direction`: "up" or "down" (binary only)
+   - `probability`: 0.0 to 1.0
+   - `confidence`: 0.0 to 1.0
+   - `horizon_days`: 1
+   - `evidence`: list of observations citing `source_capability: "microstructure"`, `"sentiment"`, or `"market_data"`.
+   - `dissent`: optional contrarian retail sentiment warning.
