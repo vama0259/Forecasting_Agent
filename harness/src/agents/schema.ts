@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
+export const CapabilitySchema = z.enum(['market_data', 'flows', 'macro', 'microstructure', 'sentiment']);
+
+export type Capability = z.infer<typeof CapabilitySchema>;
+
 export const EvidenceItemSchema = z.object({
   claim: z.string().min(1, 'Evidence claim cannot be empty'),
-  source_capability: z.string().min(1, 'source_capability is required for auditability'),
+  source_capability: CapabilitySchema,
   value: z.unknown(),
   explicit_absence: z.boolean().default(false),
 });

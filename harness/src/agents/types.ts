@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { CapabilitySchema } from './schema.js';
 
 export const ParticipantAgentConfigSchema = z.object({
   name: z.enum(['price', 'fii', 'dii', 'retail']),
   roleTitle: z.string(),
   description: z.string(),
   promptTemplate: z.string(),
-  allowedCapabilities: z.array(z.string()),
+  allowedCapabilities: z.array(CapabilitySchema),
   dataLaneDescription: z.string(),
   workspaceSubpath: z.string(),
   allowedWritePaths: z.array(z.string()),

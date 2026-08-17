@@ -1,7 +1,7 @@
 import { createMiddleware } from 'langchain';
-import type { AgentSignal } from '../agents/schema.js';
+import type { AgentSignal, Capability } from '../agents/schema.js';
 
-export function buildEvidenceValidationMiddleware(agentName: string, allowedCapabilities: string[]) {
+export function buildEvidenceValidationMiddleware(agentName: string, allowedCapabilities: Capability[]) {
   return createMiddleware({
     name: 'EvidenceValidationMiddleware',
     afterModel: async (state: { structuredResponse?: Record<string, unknown> }) => {
@@ -10,9 +10,9 @@ export function buildEvidenceValidationMiddleware(agentName: string, allowedCapa
       if (Array.isArray(signal.evidence)) {
         let hasViolation = false;
         for (const item of signal.evidence) {
-          if (!allowedCapabilities.includes(item.source_capability)) {
+          if (!item || !allowedCapabilities.includes(item.source_capability as Capability)) {
             console.warn(
-              `[${agentName}] Evidence source_capability '${item.source_capability}' is outside allowed set: ${allowedCapabilities.join(', ')}. Marking signal degraded.`,
+              `[${agentName}] Evidence source_capability '${item?.source_capability}' is outside allowed set: ${allowedCapabilities.join(', ')}. Marking signal degraded.`,
             );
             hasViolation = true;
           }
