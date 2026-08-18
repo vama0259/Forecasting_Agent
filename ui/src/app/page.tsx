@@ -33,7 +33,8 @@ export default function Page() {
   const [selectedSymbol, setSelectedSymbol] = useState<string>("SBIFUNDS.NS");
   const [debate, setDebate] = useState<FullDebateSummary>(mockDebateSummary);
   const [currentRoundIndex, setCurrentRoundIndex] = useState<1 | 2 | 3 | 4>(4);
-  const [activeAgent, setActiveAgent] = useState<ParticipantAgentId | null>(null);
+  const [selectedViewingRound, setSelectedViewingRound] = useState<1 | 2 | 3 | 4>(4);
+  const [activeAgents, setActiveAgents] = useState<Set<ParticipantAgentId>>(new Set());
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<"charts" | "scripts" | "critiques" | "devilsAdvocate" | "news" | "reasoning">("charts");
   const [streamingReasoning, setStreamingReasoning] = useState<Record<ParticipantAgentId, string>>({
@@ -69,7 +70,8 @@ export default function Page() {
   const handleRunLiveDebate = () => {
     setIsStreaming(true);
     setCurrentRoundIndex(1);
-    setActiveAgent("price");
+    setSelectedViewingRound(1);
+    setActiveAgents(new Set(["price", "fii", "dii", "retail"]));
     setStreamingReasoning({ price: "", fii: "", dii: "", retail: "" });
 
     const eventSource = new EventSource(`/api/debate/stream?symbol=${encodeURIComponent(selectedSymbol)}`);
@@ -80,8 +82,10 @@ export default function Page() {
 
         if (data.type === "round-start") {
           setCurrentRoundIndex(data.roundIndex);
+          setSelectedViewingRound(data.roundIndex);
+          setActiveAgents(new Set(["price", "fii", "dii", "retail"]));
         } else if (data.type === "agent-turn-start") {
-          setActiveAgent(data.agent);
+          setActiveAgents((prev) => new Set([...Array.from(prev), data.agent]));
         } else if (data.type === "reasoning-token") {
           setStreamingReasoning((prev) => ({
             ...prev,
@@ -95,7 +99,8 @@ export default function Page() {
           });
         } else if (data.type === "consensus-resolved") {
           setCurrentRoundIndex(4);
-          setActiveAgent(null);
+          setSelectedViewingRound(4);
+          setActiveAgents(new Set());
           setDebate((prev) => ({
             ...prev,
             consensusDirection: data.direction,
@@ -107,6 +112,7 @@ export default function Page() {
           }));
         } else if (data.type === "round-complete" && data.roundIndex === 4) {
           setIsStreaming(false);
+          setActiveAgents(new Set());
           eventSource.close();
           loadDebateData(selectedSymbol);
         }
@@ -135,8 +141,44 @@ export default function Page() {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
-        {/* Checkpoint Timeline */}
-        <CheckpointTimeline currentRound={currentRoundIndex} />
+        {/* Checkpoint Timeline with interactive round scrubbing */}
+        <CheckpointTimeline
+          currentRound={currentRoundIndex}
+          selectedRound={selectedViewingRound}
+          onSelectRound={(r) => setSelectedViewingRound(r)}
+        />
+
+        {/* Round Switcher Navigation Pills */}
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-zinc-800/90 bg-zinc-950/70 backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-zinc-300">Viewing Round:</span>
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              {([1, 2, 3, 4] as const).map((r) => (
+                <button
+                  type="button"
+                  key={r}
+                  onClick={() => setSelectedViewingRound(r)}
+                  className={cn(
+                    "px-3 py-1 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer select-none",
+                    selectedViewingRound === r
+                      ? r === 3
+                        ? "bg-red-500 text-white font-bold shadow-md shadow-red-950/50 ring-1 ring-red-400"
+                        : "bg-emerald-500 text-black font-bold shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400"
+                      : "bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-zinc-800/80"
+                  )}
+                >
+                  {r === 1 && "Round 1 (Features)"}
+                  {r === 2 && "Round 2 (Critiques)"}
+                  {r === 3 && "Round 3 (Devil's Advocate)"}
+                  {r === 4 && "Round 4 (Consensus)"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <span className="text-[11px] text-zinc-500 font-mono hidden sm:inline">
+            Click round tabs to scrub across deliberation stages
+          </span>
+        </div>
 
         {/* 4-Participant Roster & Executive Consensus Hero Row */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -146,17 +188,26 @@ export default function Page() {
               const r1Signal = rounds.round1?.[agentId];
               const r2Signal = rounds.round2?.[agentId];
               const r3Signal = rounds.round3?.[agentId];
-              const latestSignal = r3Signal || r2Signal || r1Signal;
+
+              // Round-specific signal display
+              const targetSignal =
+                selectedViewingRound === 1
+                  ? r1Signal
+                  : selectedViewingRound === 2
+                  ? r2Signal || r1Signal
+                  : selectedViewingRound === 3
+                  ? r3Signal || r2Signal || r1Signal
+                  : r3Signal || r2Signal || r1Signal;
 
               return (
                 <AgentCard
                   key={agentId}
                   agent={agentId}
-                  active={activeAgent === agentId}
-                  direction={latestSignal?.direction}
-                  probability={latestSignal?.probability}
-                  confidence={latestSignal?.confidence}
-                  degraded={latestSignal?.degraded}
+                  active={activeAgents.has(agentId)}
+                  direction={targetSignal?.direction}
+                  probability={targetSignal?.probability}
+                  confidence={targetSignal?.confidence}
+                  degraded={targetSignal?.degraded}
                 />
               );
             })}
@@ -285,7 +336,7 @@ export default function Page() {
                     <div key={agentId} className="p-3 rounded bg-zinc-900 border border-zinc-800/80">
                       <div className="text-zinc-400 font-bold uppercase mb-1.5 flex items-center justify-between">
                         <span>[{agentId}] Stream:</span>
-                        {activeAgent === agentId && (
+                        {activeAgents.has(agentId) && (
                           <span className="text-[10px] text-emerald-400 animate-pulse">Streaming</span>
                         )}
                       </div>
