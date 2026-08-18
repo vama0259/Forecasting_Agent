@@ -10,6 +10,7 @@ import type {
   PythonScriptArtifact,
   PeerCritiqueItem,
   EvidenceItem,
+  SearchArticleObservation,
 } from '@/lib/debate/types';
 
 export const dynamic = 'force-dynamic';
@@ -199,9 +200,40 @@ export async function GET(request: Request) {
       }
     }
 
+    // Query search observations from PostgreSQL
+    let searchObservations: SearchArticleObservation[] = [];
+    try {
+      const searchRes = await pool.query(
+        `SELECT id, query, provider, result_rank, title, url, hostname, allowed, content, retrieved_at
+         FROM search_observations
+         ORDER BY retrieved_at DESC
+         LIMIT 50`
+      );
+      searchObservations = searchRes.rows.map((r) => ({
+        id: r.id,
+        query: r.query,
+        provider: r.provider,
+        resultRank: r.result_rank,
+        title: r.title || 'Financial News Article',
+        url: r.url || '',
+        hostname: r.hostname || '',
+        allowed: Boolean(r.allowed),
+        content: r.content || '',
+        retrievedAt: new Date(r.retrieved_at).toISOString(),
+      }));
+    } catch (searchErr) {
+      console.warn('Could not load search observations:', searchErr);
+    }
+
     const debatesList = Array.from(debatesMap.values()).slice(0, limit);
+    for (const d of debatesList) {
+      d.searchArticles = searchObservations;
+    }
+
     if (debatesList.length === 0) {
-      return NextResponse.json({ debates: [mockDebateSummary] });
+      return NextResponse.json({
+        debates: [{ ...mockDebateSummary, searchArticles: searchObservations }],
+      });
     }
 
     return NextResponse.json({ debates: debatesList });

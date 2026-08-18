@@ -99,7 +99,7 @@ export const AGENT_CONFIGS: ParticipantAgentConfig[] = [
       '/workspace/bars.json',
       '/memories/**',
     ],
-    tools: ['fetch_microstructure', 'fetch_option_chain', 'fetch_ohlcv'],
+    tools: ['fetch_microstructure', 'fetch_option_chain', 'fetch_ohlcv', 'search_news'],
     skills: [],
     maxTokenBudget: 1_000_000,
     horizon_days: 1,

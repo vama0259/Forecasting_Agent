@@ -119,6 +119,19 @@ export interface PersistedDebateRoundRecord {
   createdAt: string;
 }
 
+export interface SearchArticleObservation {
+  id: string;
+  query: string;
+  provider: string;
+  resultRank: number;
+  title: string;
+  url: string;
+  hostname: string;
+  allowed: boolean;
+  content: string;
+  retrievedAt: string;
+}
+
 export interface FullDebateSummary {
   forecastId: string;
   symbol: string;
@@ -137,4 +150,5 @@ export interface FullDebateSummary {
     round4: PersistedDebateRoundRecord;
   };
   scripts?: PythonScriptArtifact[];
+  searchArticles?: SearchArticleObservation[];
 }

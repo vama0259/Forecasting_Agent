@@ -12,6 +12,7 @@ import { DebateCharts } from "@/components/debate/debate-charts";
 import { ScriptBrowser } from "@/components/debate/script-browser";
 import { PeerCritiquesMatrix } from "@/components/debate/peer-critiques-matrix";
 import { DevilsAdvocatePanel } from "@/components/debate/devils-advocate-panel";
+import { SearchIntelligence } from "@/components/debate/search-intelligence";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ import {
   TerminalIcon,
   LayersIcon,
   ShieldCheckIcon,
+  Newspaper as NewspaperIcon,
 } from "lucide-react";
 
 const PARTICIPANTS: ParticipantAgentId[] = ["price", "fii", "dii", "retail"];
@@ -33,7 +35,7 @@ export default function Page() {
   const [currentRoundIndex, setCurrentRoundIndex] = useState<1 | 2 | 3 | 4>(4);
   const [activeAgent, setActiveAgent] = useState<ParticipantAgentId | null>(null);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<"charts" | "scripts" | "critiques" | "devilsAdvocate" | "reasoning">("charts");
+  const [activeTab, setActiveTab] = useState<"charts" | "scripts" | "critiques" | "devilsAdvocate" | "news" | "reasoning">("charts");
   const [streamingReasoning, setStreamingReasoning] = useState<Record<ParticipantAgentId, string>>({
     price: "",
     fii: "",
@@ -227,6 +229,24 @@ export default function Page() {
               </button>
 
               <button
+                onClick={() => setActiveTab("news")}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all",
+                  activeTab === "news"
+                    ? "bg-zinc-800 text-zinc-100 shadow-sm border border-zinc-700"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                )}
+              >
+                <NewspaperIcon className="w-3.5 h-3.5 text-amber-400" />
+                <span>AnySearch News & Articles</span>
+                {debate.searchArticles && debate.searchArticles.length > 0 && (
+                  <Badge variant="outline" className="text-[10px] ml-1 bg-amber-500/10 text-amber-300 border-amber-500/30">
+                    {debate.searchArticles.length}
+                  </Badge>
+                )}
+              </button>
+
+              <button
                 onClick={() => setActiveTab("reasoning")}
                 className={cn(
                   "px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all",
@@ -252,6 +272,7 @@ export default function Page() {
             {activeTab === "scripts" && <ScriptBrowser scripts={collectedScripts} />}
             {activeTab === "critiques" && <PeerCritiquesMatrix debate={debate} />}
             {activeTab === "devilsAdvocate" && <DevilsAdvocatePanel debate={debate} />}
+            {activeTab === "news" && <SearchIntelligence articles={debate.searchArticles} />}
             {activeTab === "reasoning" && (
               <Card className="bg-zinc-950 border-zinc-800 text-zinc-200 shadow-xl p-4">
                 <CardHeader className="p-0 pb-3 border-b border-zinc-800">
