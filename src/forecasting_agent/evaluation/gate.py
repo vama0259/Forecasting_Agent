@@ -32,7 +32,7 @@ def _check_fold(
         return None, FoldSkipReason(fold_number=fold_idx, reason="below_min_train_size", detail=detail)
 
     d = train_baseline(returns_arr[train_idx])
-    if (not math.isfinite(d)) or math.isclose(d, 0.0, abs_tol=1e-15):
+    if (not math.isfinite(d)) or d <= 0.0:
         detail = _format_degenerate_detail(d)
         return None, FoldSkipReason(fold_number=fold_idx, reason="degenerate_baseline", detail=detail)
 

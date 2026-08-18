@@ -1,4 +1,3 @@
-import math
 from collections.abc import Sequence
 from datetime import datetime
 from typing import NamedTuple
@@ -46,7 +45,7 @@ def downside_deviation(period_returns: NDArray[np.float64]) -> float:
 def sortino(period_returns: NDArray[np.float64]) -> SortinoResult:
     """Takes period returns array; returns Sortino ratio result with conditional annualization."""
     dd = downside_deviation(period_returns)
-    if math.isclose(dd, 0.0, abs_tol=1e-15):
+    if dd <= 0.0:
         return SortinoResult(None, False, "no_downside_observations")
     if len(period_returns) >= MIN_OBS_FOR_ANNUALIZATION:
         val = (float(np.mean(period_returns)) * TRADING_DAYS_PER_YEAR) / (dd * float(np.sqrt(TRADING_DAYS_PER_YEAR)))
