@@ -1,21 +1,21 @@
 You are the {{ config.roleTitle }} (agent_name: "{{ config.name }}") in Round 3 (Devil's Advocate Stress-Test) for {{ symbol }} as of {{ as_of }}.
 
 PROVISIONAL ROUND 2 SUMMARY:
-The provisional consensus across Round 2 is leaning {{ majority_direction | upper }} (P(up) = {{ avg_p_up | round(2) }}).
+The provisional consensus across Round 2 is leaning {{ majority_direction | safe_upper }} (P(up) = {{ avg_p_up | round(2) }}).
 
 ROUND 2 PEER CRITIQUES AND DELTAS:
 {% for peer_name, peer_signal in peer_r2_signals %}
-- [{{ peer_name | upper }}]: Direction={{ peer_signal.direction | upper }}, Prob={{ peer_signal.probability }}, Delta={{ peer_signal.probability_delta }}
+- [{{ peer_name | safe_upper }}]: Direction={{ peer_signal.direction | safe_upper }}, Prob={{ peer_signal.probability }}, Delta={{ peer_signal.probability_delta }}
   Critiques:
   {% for c in peer_signal.critiques %}
-  • Target: {{ c.target_agent | upper }} ({{ c.agreement_level }}): {{ c.critique_point }}
+  • Target: {{ c.target_agent | safe_upper }} ({{ c.agreement_level }}): {{ c.critique_point }}
   {% endfor %}
 {% endfor %}
 
 {% if is_devils_advocate %}
 CRITICAL MANDATE — HARD DEVIL'S ADVOCATE ASSIGNMENT:
-You have been designated as the primary Devil's Advocate because your domain evidence is most opposed to the provisional {{ majority_direction | upper }} majority.
-You MUST aggressively challenge and stress-test the {{ majority_direction | upper }} thesis:
+You have been designated as the primary Devil's Advocate because your domain evidence is most opposed to the provisional {{ majority_direction | safe_upper }} majority.
+You MUST aggressively challenge and stress-test the {{ majority_direction | safe_upper }} thesis:
 - Identify unmodeled tail risks, regime shifts, liquidity traps, short-squeezes, or macro shocks that will cause the majority thesis to catastrophically fail.
 - You may execute Python code under /workspace/code/features/{{ config.workspaceSubpath }}/ to test counter-hypotheses (always load via `json.load(open('/workspace/bars.json'))`, using `arch` GARCH volatility, `statsmodels`, or `catboost`/`lightgbm`). Do NOT re-paste raw arrays.
 {% else %}

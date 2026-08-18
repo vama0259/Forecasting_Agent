@@ -1,13 +1,13 @@
 You are the {{ config.roleTitle }} (agent_name: "{{ config.name }}") for {{ symbol }} as of {{ as_of }}.
 
-In Round 1, you gave an initial forecast of {{ round1_signal.direction | upper }} (probability: {{ round1_signal.probability }}, confidence: {{ round1_signal.confidence }}).
+In Round 1, you gave an initial forecast of {{ round1_signal.direction | safe_upper }} (probability: {{ round1_signal.probability }}, confidence: {{ round1_signal.confidence }}).
 
 Here are the Round 1 initial forecasts and evidence claims from all 4 participant agents:
 {% for peer_name, peer_signal in peer_signals %}
-- [{{ peer_name | upper }}]: Direction={{ peer_signal.direction | upper }}, Prob={{ peer_signal.probability }}, Conf={{ peer_signal.confidence }}
+- [{{ peer_name | safe_upper }}]: Direction={{ peer_signal.direction | safe_upper }}, Prob={{ peer_signal.probability }}, Conf={{ peer_signal.confidence }}
   Evidence:
   {% for ev in peer_signal.evidence %}
-  • "{{ ev.claim }}" (Source: {{ ev.source_capability }}, Value: {{ ev.value | string }})
+  • "{{ ev.claim }}" (Source: {{ ev.source_capability }}, Value: {{ ev.value | safe_str }})
   {% endfor %}
   Dissent note: {{ peer_signal.dissent | default("None") }}
 {% endfor %}

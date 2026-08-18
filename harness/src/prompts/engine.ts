@@ -13,6 +13,23 @@ const env = new nunjucks.Environment(new nunjucks.FileSystemLoader(PROMPTS_DIR),
   lstripBlocks: true,
 });
 
+env.addFilter('safe_str', (val: unknown) => {
+  if (val === null || val === undefined) return 'N/A';
+  if (typeof val === 'object') {
+    try {
+      return JSON.stringify(val);
+    } catch {
+      return String(val);
+    }
+  }
+  return String(val);
+});
+
+env.addFilter('safe_upper', (val: unknown) => {
+  if (val === null || val === undefined) return '';
+  return String(val).toUpperCase();
+});
+
 export interface PromptContext {
   symbol: string;
   as_of: string;
