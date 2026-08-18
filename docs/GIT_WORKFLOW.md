@@ -40,7 +40,7 @@ A **Kanban Board** gives you a visual pipeline of your work:
 
 ## 2. Git Branch Naming Rules
 
-**Rule:** Never write code directly on `main`. Always create a feature branch linked to a GitHub issue:
+**Rule:** Never write code directly on `master`. Always create a feature branch linked to a GitHub issue:
 
 ```bash
 # Pattern: <type>/issue-<number>-<short-description>
@@ -86,7 +86,7 @@ git commit -m "docs(adr): add ADR-028 prompt compilation with DSPy (#12)"
 
 ## 4. Pull Requests & Auto-Closing Issues
 
-When your feature branch is tested and ready to merge into `main`:
+When your feature branch is tested and ready to merge into `master`:
 
 1. Open a Pull Request using `gh pr create`:
    ```bash
@@ -128,8 +128,8 @@ git tag -n
 
 ```bash
 # 1. Pick up an issue from the Kanban board (e.g. Issue #4)
-git checkout main
-git pull origin main
+git checkout master
+git pull origin master
 git checkout -b feat/issue-4-capability-layer
 
 # 2. Write code & test
@@ -144,8 +144,8 @@ git commit -m "feat(harness): implement capability registry and config (#4)"
 git push -u origin feat/issue-4-capability-layer
 gh pr create --fill --body "Closes #4"
 
-# 5. Merge PR & update local main
+# 5. Merge PR & update local master
 gh pr merge --squash --delete-branch
-git checkout main
-git pull origin main
+git checkout master
+git pull origin master
 ```
