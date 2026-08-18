@@ -4,6 +4,18 @@
 
 ---
 
+## ▶️ One forecast run, end to end
+
+What goes in, where it goes, and what each hop hands to the next — twelve stages from an input symbol to a persisted signal. Teal stages run in the TypeScript harness, amber in Python; every stage is captioned with the file it lives in.
+
+![Animated walkthrough of one forecast run: input symbol through market data, sandbox execution, scoring, and persistence](docs/forecast-run-flow.gif)
+
+The three hops that carry no import between them are process boundaries: the harness spawns the market-data server over **MCP stdio** (`harness/harness_config.yaml:13`), executes model code in a **`--network none` Docker container** (`harness/src/sandbox/manager.ts:110`), and reaches the evaluation package only through a **read-only bind mount** at `/workspace/m8` (`harness/src/sandbox/manager.ts:123`).
+
+Regenerate with `uv run python scripts/generate_flow_gif.py`.
+
+---
+
 ## 🏛️ System Architecture
 
 ```mermaid
@@ -148,3 +160,4 @@ Round 4: Deterministic Math    ──► Calibration-weighted combination comput
 - [Product Strategy, ICP & Output Design](docs/PRODUCT_STRATEGY.md)
 - [Metric Stack & Evaluation Reference](docs/METRICS.md)
 - [Industry & Cross-Domain Roadmap](docs/INDUSTRY_ROADMAP.md)
+- [Code-derived architecture diagram](docs/architecture.generated.mmd) — extracted from the AST graph (1,271 symbols, 2,787 directed edges), not hand-drawn. Where it disagrees with the diagram above, it is the fact and the diagram above is the intent. Regenerate with `uv run python scripts/graph_to_architecture.py`.
