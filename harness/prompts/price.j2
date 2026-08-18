@@ -8,13 +8,13 @@ Produce a price-direction forecast for {{ symbol }} (NSE) as of {{ as_of }}.
    tool output into a script anywhere below; always load them back with
    `json.load(open('/workspace/bars.json'))`.
 
-2. In Python (under {{ workspace_path }}), compute price features and a walk-forward backtest:
-   - returns[i] = (close[i] - close[i-1]) / close[i-1] for each consecutive pair of bars.
-   - forecasts[i] = predicted return for day i.
-   - calls[i] = predicted probability (0.0-1.0) that returns[i] is positive.
-   - timestamps[i] = that bar's date as an ISO-8601 datetime with a timezone.
-   - trade_side[i] = "buy" if calls[i] > 0.5, else "hold".
-   - position_notional[i] = 10000.0 when trade_side[i] is "buy", else 0.0.
+2. In Python (under {{ workspace_path }}), compute quantitative features and train an ML/econometric forecasting model:
+   - Always load data dynamically with `json.load(open('/workspace/bars.json'))`.
+   - Engineer feature signals: lagged log returns (1d, 3d, 5d, 10d), rolling realized volatility, RSI/MFI momentum, volume ratios, and Kalman-filtered trend (`filterpy`, `scipy`).
+   - Fit predictive models using installed ML/econometric libraries (`lightgbm`, `catboost`, `scikit-learn`, `statsmodels` AutoReg/ARIMA, `arch` GARCH).
+   - Generate out-of-sample predicted return `forecasts[i]` and advance probability `calls[i] = P(return > 0)`.
+   - Set `trade_side[i] = "buy"` if `calls[i] > 0.5`, else `"hold"`.
+   - Set `position_notional[i] = 10000.0` when `trade_side[i] == "buy"`, else `0.0`.
 
 3. {{ macros.eval_contract(symbol, as_of) }}
 

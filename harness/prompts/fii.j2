@@ -7,15 +7,13 @@ Produce a Foreign Institutional Investor (FII) intent forecast for {{ symbol }} 
    b. fetch_ohlcv(symbol="{{ symbol }}", market="NSE", start="{{ start_date }}", end="{{ as_of }}", as_of="{{ as_of }}")
       Immediately save the exact result using write_file to /workspace/bars.json.
 
-2. In Python (under /workspace/code/features/fii/), write an analysis script (e.g. `fii_features.py`) to inspect the flow data:
-   - Calculate FII Index Futures Long/Short ratio:
-     fii_long = FII record's future_index_long
-     fii_short = FII record's future_index_short
-     long_short_ratio = fii_long / max(1, fii_short)
-   - Calculate FII Net Stock Futures vs Index Futures stance.
-   - Note: NSE FII flow data is market-wide, not stock-specific (ADR-023). Analyze {{ symbol }} price action in the context of institutional risk-on or risk-off positioning.
+2. In Python (under /workspace/code/features/fii/), write an analysis script (e.g. `fii_features.py`) to fit quantitative flow & regime models:
+   - Always load data dynamically with `json.load(open('/workspace/bars.json'))` and `json.load(open('/workspace/flows.json'))`.
+   - Calculate FII Index Futures Long/Short ratio: `fii_long / max(1, fii_short)` and rolling 5d/10d change in net positioning.
+   - Fit ML/econometric classification or regression models (`scikit-learn`, `catboost`, `lightgbm`, `statsmodels`) combining market-wide FII positioning with {{ symbol }}'s relative strength and beta.
+   - Evaluate institutional risk-on/risk-off regime shifts and cross-border flow momentum.
    - If flows data is empty (e.g. holiday or weekend), handle gracefully with explicit_absence: true.
-   - Run the script in the sandbox via execute to verify the indicators.
+   - Run the script in the sandbox via execute to verify the indicators and model metrics.
 
 3. Separately, as your structured final response, give your overall FII intent forecast for {{ symbol }} over the next {{ horizon_days }} day:
    - `agent_name`: "fii"
