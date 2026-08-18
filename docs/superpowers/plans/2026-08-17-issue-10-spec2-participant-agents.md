@@ -36,6 +36,7 @@
   from unittest.mock import MagicMock, patch
   from forecasting_agent.data_server.server import fetch_option_chain
 
+
   def test_fetch_option_chain_defaults_to_nearest_expiry():
       with patch("forecasting_agent.data_server.server.yf.Ticker") as mock_ticker:
           instance = MagicMock()
