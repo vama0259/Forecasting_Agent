@@ -106,6 +106,7 @@ export default function Page() {
         } else if (data.type === "round-complete" && data.roundIndex === 4) {
           setIsStreaming(false);
           eventSource.close();
+          loadDebateData(selectedSymbol);
         }
       } catch (err) {
         console.error("Error processing stream event:", err);

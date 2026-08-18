@@ -56,14 +56,13 @@ class ConnectorRegistry:
             connector_cls = self._find_connector_class(module)
 
         if not isinstance(connector_cls, type) or not issubclass(connector_cls, ArchiveDerivedPlugin):
-            raise TypeError(
-                f"Target '{target}' resolved to {connector_cls}, which is not a subclass of ArchiveDerivedPlugin"
-            )
+            raise TypeError(f"Target '{target}' resolved to non-subclass of ArchiveDerivedPlugin")
 
         instance: ArchiveDerivedPlugin = connector_cls()
         return instance
 
-    def _find_connector_class(self, module: Any) -> type[ArchiveDerivedPlugin]:
+    @staticmethod
+    def _find_connector_class(module: Any) -> type[ArchiveDerivedPlugin]:
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
             if isinstance(attr, type) and issubclass(attr, ArchiveDerivedPlugin) and attr is not ArchiveDerivedPlugin:
@@ -91,7 +90,11 @@ def get_connector_registry() -> ConnectorRegistry:
     global _DEFAULT_CONNECTOR_REGISTRY
     if _DEFAULT_CONNECTOR_REGISTRY is None:
         _DEFAULT_CONNECTOR_REGISTRY = ConnectorRegistry()
-    return _DEFAULT_CONNECTOR_REGISTRY
+    registry = _DEFAULT_CONNECTOR_REGISTRY
+    if registry is None:
+        registry = ConnectorRegistry()
+        _DEFAULT_CONNECTOR_REGISTRY = registry
+    return registry
 
 
 def resolve(name: str) -> ArchiveDerivedPlugin:

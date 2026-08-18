@@ -20,13 +20,15 @@ class AngelOneInstrumentMaster:
 
     def resolve(self, tradingsymbol: str, exchange: str) -> str:
         # Resolves trading symbol and exchange to instrument token string, raising SymbolNotFoundError if missing.
-        if self._instruments is None:
+        instruments = self._instruments
+        if instruments is None:
             resp = httpx.get(INSTRUMENT_MASTER_URL, timeout=30)
             resp.raise_for_status()
             data = resp.json()
-            self._instruments = data if isinstance(data, list) else []
+            instruments = data if isinstance(data, list) else []
+            self._instruments = instruments
 
-        for row in self._instruments:
+        for row in instruments:
             if row.get("symbol") == tradingsymbol and row.get("exch_seg") == exchange:
                 return str(row["token"])
 

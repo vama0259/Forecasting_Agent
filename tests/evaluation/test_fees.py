@@ -123,7 +123,7 @@ def test_shipped_schedule_has_exactly_one_vintage_effective_2024() -> None:
 def test_profiles_are_frozen(schedule: IndianFeeSchedule) -> None:
     profile = INDIAN_RATE_VINTAGES[0].profiles["EQUITY_DELIVERY"]
     with pytest.raises(Exception, match=r"cannot assign|rozen"):
-        profile.stt_buy = 0.9  # type: ignore[misc]
+        setattr(profile, "stt_buy", 0.9)  # noqa: B010
 
 
 @given(

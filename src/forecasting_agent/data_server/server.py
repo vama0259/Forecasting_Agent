@@ -149,8 +149,8 @@ def fetch_ohlcv(
     # Fetch, clean, normalize, and filter daily OHLCV bars for a symbol.
     plugin = resolve(market)
     cache = ParquetCache()
-    start_date = date.fromisoformat(start) if isinstance(start, str) else start
-    end_date = date.fromisoformat(end) if isinstance(end, str) else end
+    start_date = date.fromisoformat(start)
+    end_date = date.fromisoformat(end)
 
     raw_bars, data_stale, freshly_fetched = _fetch_raw_ohlcv(plugin, cache, symbol, market, start_date, end_date)
 
@@ -162,7 +162,7 @@ def fetch_ohlcv(
         cache.put(symbol, market, normalized_bars)
         _archive_ohlcv_snapshot(market, symbol, normalized_bars)
 
-    as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
+    as_of_date = date.fromisoformat(as_of) if as_of is not None else None
     filtered_bars = filter_as_of(normalized_bars, as_of=as_of_date)
 
     return OHLCVResponse(
@@ -175,14 +175,14 @@ def fetch_ohlcv(
 
 def _validate_fno_as_of(as_of: str | None) -> None:
     if as_of is not None:
-        as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
+        as_of_date = date.fromisoformat(as_of)
         today = date.today()  # noqa: DTZ011
         if as_of_date > today:
             raise LeakageError(f"as_of date {as_of_date} is in the future relative to today ({today})")
 
 
 def _populate_option_side(df: Any, strikes_map: dict[float, dict[str, Any]], prefix: str) -> None:
-    if df is None or df.empty:
+    if df is None or getattr(df, "empty", True):
         return
     ltp_key = f"{prefix}_ltp"
     oi_key = f"{prefix}_oi"
@@ -208,7 +208,7 @@ def fetch_option_chain(
         ticker_symbol = f"{underlying}.NS"
 
     strikes_map: dict[float, dict[str, Any]] = {}
-    resolved_expiry_date = None
+    resolved_expiry_date: date | None = None
     try:
         ticker = yf.Ticker(ticker_symbol)
         options = getattr(ticker, "options", [])
@@ -217,7 +217,7 @@ def fetch_option_chain(
         elif options:
             target_expiry = options[0]
         else:
-            target_expiry = str(as_of or date.today())  # noqa: DTZ011
+            target_expiry = as_of or str(date.today())  # noqa: DTZ011
 
         resolved_expiry_date = date.fromisoformat(target_expiry)
         chain = ticker.option_chain(target_expiry) if target_expiry in options else ticker.option_chain()
@@ -249,9 +249,9 @@ def fetch_option_chain(
 def fetch_flows(observed_on: str, as_of: str | None = None) -> FlowsResponse:
     # Fetch participant-wise F&O open interest flow records for a given date.
     connector = get_connector_registry().resolve("flows")
-    obs_date = date.fromisoformat(observed_on) if isinstance(observed_on, str) else observed_on
+    obs_date = date.fromisoformat(observed_on)
     records = connector.fetch(obs_date)
-    as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
+    as_of_date = date.fromisoformat(as_of) if as_of is not None else None
     filtered = filter_as_of(records, as_of=as_of_date, key=lambda r: r.observed_on)
     return FlowsResponse(observed_on=obs_date, records=filtered)
 
@@ -260,9 +260,9 @@ def fetch_flows(observed_on: str, as_of: str | None = None) -> FlowsResponse:
 def fetch_microstructure(observed_on: str, as_of: str | None = None) -> MicrostructureResponse:
     # Fetch delivery percentage and bulk/block deal records for a given date.
     connector = get_connector_registry().resolve("microstructure")
-    obs_date = date.fromisoformat(observed_on) if isinstance(observed_on, str) else observed_on
+    obs_date = date.fromisoformat(observed_on)
     response: MicrostructureResponse = connector.fetch(obs_date)
-    as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
+    as_of_date = date.fromisoformat(as_of) if as_of is not None else None
     response.delivery = filter_as_of(response.delivery, as_of=as_of_date, key=lambda r: r.observed_on)
     response.bulk_deals = filter_as_of(response.bulk_deals, as_of=as_of_date, key=lambda r: r.observed_on)
     response.block_deals = filter_as_of(response.block_deals, as_of=as_of_date, key=lambda r: r.observed_on)

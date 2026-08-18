@@ -3,9 +3,11 @@
 import hashlib
 import os
 import time
+from collections.abc import Generator
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+import psycopg
 import pytest
 
 from forecasting_agent.archive.store import ObservationStore
@@ -16,11 +18,11 @@ CONN_STRING = os.environ.get("STORAGE_CONNECTION_STRING", "postgresql://harness:
 
 
 @pytest.fixture
-def store(tmp_path: Path) -> ObservationStore:
+def store(tmp_path: Path) -> Generator[ObservationStore, None, None]:
     # Takes a pytest tmp_path; returns a fresh ObservationStore rooted there, with its rows cleared after the test.
     s = ObservationStore(archive_dir=str(tmp_path), connection_string=CONN_STRING)
     yield s
-    with s._connect() as conn:
+    with psycopg.connect(CONN_STRING) as conn:
         conn.execute("DELETE FROM observation_archive WHERE source LIKE 'test_%'")
         conn.commit()
 

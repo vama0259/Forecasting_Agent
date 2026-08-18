@@ -64,12 +64,13 @@ class PluginRegistry:
             plugin_cls = self._find_plugin_class(module)
 
         if not isinstance(plugin_cls, type) or not issubclass(plugin_cls, MarketPlugin):
-            raise TypeError(f"Target '{target}' resolved to {plugin_cls}, which is not a subclass of MarketPlugin")
+            raise TypeError(f"Target '{target}' resolved to non-subclass of MarketPlugin")
 
         instance: MarketPlugin = plugin_cls()
         return instance
 
-    def _find_plugin_class(self, module: Any) -> type[MarketPlugin]:
+    @staticmethod
+    def _find_plugin_class(module: Any) -> type[MarketPlugin]:
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
             if isinstance(attr, type) and issubclass(attr, MarketPlugin) and attr is not MarketPlugin:
@@ -97,7 +98,11 @@ def get_registry() -> PluginRegistry:
     global _DEFAULT_REGISTRY
     if _DEFAULT_REGISTRY is None:
         _DEFAULT_REGISTRY = PluginRegistry()
-    return _DEFAULT_REGISTRY
+    registry = _DEFAULT_REGISTRY
+    if registry is None:
+        registry = PluginRegistry()
+        _DEFAULT_REGISTRY = registry
+    return registry
 
 
 def resolve(market: str) -> MarketPlugin:

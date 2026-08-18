@@ -5,6 +5,9 @@ from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
+TradeSide = Literal["buy", "sell", "hold"]
+Segment = Literal["EQUITY_DELIVERY", "EQUITY_INTRADAY", "EQUITY_FUTURES", "EQUITY_OPTIONS"]
+
 
 class EvalRequest(BaseModel):
     """Evaluation request data contract holding price-action series and configuration."""
@@ -14,9 +17,9 @@ class EvalRequest(BaseModel):
     calls: Sequence[Annotated[float, Field(ge=0.0, le=1.0)]]
     timestamps: Sequence[AwareDatetime]
     as_of: AwareDatetime
-    segment: Literal["EQUITY_DELIVERY", "EQUITY_INTRADAY", "EQUITY_FUTURES", "EQUITY_OPTIONS"]
+    segment: Segment
     position_notional: Sequence[Annotated[float, Field(allow_inf_nan=False)]]
-    trade_side: Sequence[Literal["buy", "sell", "hold"]]
+    trade_side: Sequence[TradeSide]
     capital: Annotated[float, Field(gt=0.0, allow_inf_nan=False)]
 
     @model_validator(mode="after")
@@ -29,7 +32,8 @@ class EvalRequest(BaseModel):
             if len(val) != n:
                 mismatched[field_name] = len(val)
         if mismatched:
-            raise ValueError(f"length mismatch against returns (n={n}): {mismatched}")
+            details = ", ".join(f"'{k}': {v}" for k, v in sorted(mismatched.items()))
+            raise ValueError(f"length mismatch against returns (n={n}): {{{details}}}")
 
         for i, (side, notional) in enumerate(zip(self.trade_side, self.position_notional, strict=True)):
             if side in ("buy", "sell") and notional <= 0.0:

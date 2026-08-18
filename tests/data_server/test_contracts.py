@@ -32,7 +32,7 @@ def test_ohlcv_response_nests_bars():
 
 def test_symbol_meta_requires_market():
     with pytest.raises(ValidationError):
-        SymbolMeta(symbol="RELIANCE.NS")
+        SymbolMeta.model_validate({"symbol": "RELIANCE.NS"})
 
 
 def test_market_meta_accepts_valid_shape():

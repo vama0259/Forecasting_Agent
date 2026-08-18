@@ -57,10 +57,14 @@ BSE:
         f.write(manifest)
         path = f.name
 
+    from forecasting_agent.data_server.plugins.fallback import FallbackPlugin
+
     registry = PluginRegistry(manifest_path=path)
     nse_fallback = registry.resolve("NSE")
     bse_fallback = registry.resolve("BSE")
 
+    assert isinstance(nse_fallback, FallbackPlugin)
+    assert isinstance(bse_fallback, FallbackPlugin)
     assert nse_fallback._plugins[0] is bse_fallback._plugins[0]  # same AngelOneEquityPlugin instance
     assert nse_fallback._plugins[1] is bse_fallback._plugins[1]  # same NsePlugin instance
     Path(path).unlink()
@@ -69,6 +73,7 @@ BSE:
 def test_list_target_also_shared_with_a_string_target_of_the_same_module() -> None:
     # A market pointing directly at nse.py (string) and a market listing it inside a
     # fallback chain must still share the same NsePlugin instance.
+    from forecasting_agent.data_server.plugins.fallback import FallbackPlugin
     from forecasting_agent.data_server.registry import PluginRegistry
 
     manifest = """
@@ -85,5 +90,6 @@ NSE:
     bse_plugin = registry.resolve("BSE")
     nse_fallback = registry.resolve("NSE")
 
+    assert isinstance(nse_fallback, FallbackPlugin)
     assert nse_fallback._plugins[1] is bse_plugin
     Path(path).unlink()

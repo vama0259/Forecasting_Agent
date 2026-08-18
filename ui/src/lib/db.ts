@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 const connectionString =
   process.env.STORAGE_CONNECTION_STRING ||
   process.env.DATABASE_URL ||
-  'postgresql://postgres:postgres@localhost:5432/forecasting_agent';
+  'postgres://harness:harness@localhost:5432/harness';
 
 let poolInstance: Pool | null = null;
 

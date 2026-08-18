@@ -57,7 +57,8 @@ class ObservationStore:
         status: str = "gap"
 
         if content is not None:
-            sha256 = hashlib.sha256(content).hexdigest()
+            sha = hashlib.sha256(content).hexdigest()
+            sha256 = sha
             bytes_len = len(content)
             status = "ok"
             sanitized_source = re.sub(r"[^\w\-:]", "_", source)
@@ -66,7 +67,7 @@ class ObservationStore:
             if not source_dir.is_relative_to(archive_root):
                 raise ArchiveWriteError(f"Invalid archive path for source: {source}")
             source_dir.mkdir(parents=True, exist_ok=True)
-            file_path = source_dir / f"{sha256}.bin"
+            file_path = source_dir / f"{sha}.bin"
             if not file_path.exists():
                 file_path.write_bytes(content)
             uri = str(file_path)
@@ -101,8 +102,10 @@ class ObservationStore:
                 (source, observed_on),
             )
             row = cur.fetchone()
-            if row is not None and row[0] is not None:
-                return Path(row[0]).read_bytes()
+            if row is not None:
+                uri_val: str | None = row[0]
+                if uri_val is not None:
+                    return Path(uri_val).read_bytes()
         return None
 
     def read_history(self, source: str, observed_on: date) -> list[ObservationRecord]:

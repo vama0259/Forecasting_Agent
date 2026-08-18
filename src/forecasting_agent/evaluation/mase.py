@@ -12,6 +12,8 @@ from forecasting_agent.evaluation.errors import DegenerateBaselineError
 def train_baseline(y_train: NDArray[np.float64]) -> float:
     """Takes train returns array; returns Hyndman's mean absolute first difference without raising."""
     diffs = np.abs(np.diff(y_train))
+    if len(diffs) == 0:
+        return float("nan")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
         return float(np.mean(diffs))

@@ -28,8 +28,9 @@ class AngelOnePlugin(MarketPlugin):
             self._session: AngelOneSession | None = AngelOneSession(credentials)
         else:
             try:
-                self._credentials = AngelOneCredentials.from_env()
-                self._session = AngelOneSession(self._credentials)
+                creds = AngelOneCredentials.from_env()
+                self._credentials = creds
+                self._session = AngelOneSession(creds)
             except KeyError:
                 self._credentials = None
                 self._session = None
@@ -45,12 +46,15 @@ class AngelOnePlugin(MarketPlugin):
 
     def fetch(self, symbol: str, start: date, end: date) -> list[OHLCVBar]:
         # Fetches daily OHLCV bars for the given symbol across start and end dates from Angel One.
-        if self._session is None:
-            self._credentials = AngelOneCredentials.from_env()
-            self._session = AngelOneSession(self._credentials)
+        session = self._session
+        if session is None:
+            creds = AngelOneCredentials.from_env()
+            self._credentials = creds
+            session = AngelOneSession(creds)
+            self._session = session
 
-        token = self._session.get_valid_token()
-        client = self._session.client
+        token = session.get_valid_token()
+        client = session.client
         client.setAccessToken(token)
 
         instrument_token: str | None = None
@@ -106,4 +110,4 @@ class AngelOnePlugin(MarketPlugin):
         return bars
 
 
-__all__ = ["AngelOnePlugin"]
+__all__ = ["AngelOneApiError", "AngelOnePlugin"]

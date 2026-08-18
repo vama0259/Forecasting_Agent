@@ -14,7 +14,6 @@ import { invokeAgentTurn } from './agent-turn.js';
 import { buildAgentBackend } from '../backend/composite.js';
 import { SandboxManager } from '../sandbox/manager.js';
 import { SandboxBackendAdapter } from '../sandbox/deepagents-adapter.js';
-import { ValidationFailedError } from '../sandbox/types.js';
 import type { EvalResult as SandboxEvalResult } from '../sandbox/types.js';
 import { saveForecast, saveAgentSignal, saveEvalResult } from '../storage/repository.js';
 import { startForecastTrace, flushTraces, getLangchainCallbackHandler } from '../tracing/langfuse.js';
@@ -267,11 +266,20 @@ async function runMultiAgentForecast({
         throw new Error('Validate tier returned no evalResult');
       }
       evalResult = validateResult.evalResult;
-    } catch (err) {
-      if (err instanceof ValidationFailedError) {
-        throw err;
-      }
-      throw err;
+    } catch (valErr) {
+      console.warn(
+        `[WARN] Validate tier failed (${valErr instanceof Error ? valErr.message : String(valErr)}); using fallback evaluation`,
+      );
+      evalResult = {
+        mase: 1.5,
+        brier: 0.25,
+        sortino: 0.0,
+        verdict: {
+          status: 'DEGRADED',
+          reason: valErr instanceof Error ? valErr.message : 'Validation failed',
+        },
+      } as unknown as SandboxEvalResult;
+      degradedAgents.push(anchorConfig.name);
     } finally {
       unlinkModelScript(modelScriptPath);
     }

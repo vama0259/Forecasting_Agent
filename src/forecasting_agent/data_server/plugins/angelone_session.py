@@ -74,15 +74,16 @@ class AngelOneSession:
             response = self._client.generateToken(self._refresh_token)
             if response.get("status"):
                 data = response.get("data")
-                jwt = data.get("jwtToken") if hasattr(data, "get") else None
-                if jwt:
-                    self._jwt_token = _strip_bearer_prefix(str(jwt))
-                    self._token_expiry = (self._last_call_time or 0.0) + 9000.0
+                if data is not None:
+                    jwt = data.get("jwtToken") if hasattr(data, "get") else data["jwtToken"]
+                    if jwt is not None:
+                        self._jwt_token = _strip_bearer_prefix(str(jwt))
+                        self._token_expiry = (self._last_call_time or 0.0) + 9000.0
                     refresh = data.get("refreshToken") if hasattr(data, "get") else None
-                    if refresh:
+                    if refresh is not None:
                         self._refresh_token = str(refresh)
                     return self._jwt_token
-        except KeyError:
+        except (KeyError, TypeError):
             pass
         return None
 
@@ -94,10 +95,11 @@ class AngelOneSession:
             msg = response.get("message", "Angel One login failed")
             raise AngelOneAuthError(str(msg))
 
-        self._jwt_token = _strip_bearer_prefix(str(response["data"]["jwtToken"]))
+        token = _strip_bearer_prefix(str(response["data"]["jwtToken"]))
+        self._jwt_token = token
         self._refresh_token = str(response["data"]["refreshToken"])
         self._token_expiry = (self._last_call_time or 0.0) + 9000.0
-        return self._jwt_token
+        return token
 
     def get_valid_token(self) -> str:
         # Returns a valid JWT access token, refreshing or re-authenticating if expired.

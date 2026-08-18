@@ -1,11 +1,9 @@
-"""Evaluation pipeline orchestrating gate validation, per-fold metric scoring, and mean aggregation."""
-
 from typing import Literal
 
 import numpy as np
 
 from forecasting_agent.evaluation.brier import brier, calibration_bins
-from forecasting_agent.evaluation.fees import IndianFeeSchedule
+from forecasting_agent.evaluation.fees import IndianFeeSchedule, TradeSide
 from forecasting_agent.evaluation.gate import run_gate
 from forecasting_agent.evaluation.mase import mase, zero_forecast_mase
 from forecasting_agent.evaluation.sortino import cost_adjusted_period_returns, sortino
@@ -69,7 +67,7 @@ def evaluate(
             )
         )
 
-        l3_sides = [request.trade_side[idx] for idx in test_idx]
+        l3_sides: list[TradeSide] = [request.trade_side[idx] for idx in test_idx]
         l3_ts = [request.timestamps[idx] for idx in test_idx]
         l3_notional = notional_arr[test_idx]
         l3_returns = y_test

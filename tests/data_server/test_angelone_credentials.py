@@ -30,4 +30,4 @@ def test_credentials_is_frozen() -> None:
 
     creds = AngelOneCredentials(api_key="k", client_code="c", mpin="1234", totp_secret="s")
     with pytest.raises(AttributeError):
-        creds.api_key = "changed"  # type: ignore[misc]
+        setattr(creds, "api_key", "changed")  # noqa: B010

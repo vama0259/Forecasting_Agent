@@ -17,7 +17,8 @@ from forecasting_agent.data_server.contracts import (
 class MicrostructurePlugin(ArchiveDerivedPlugin):
     # Plugin parsing delivery and deal microstructure archives into typed response models.
 
-    def _parse_delivery(self, content: bytes, observed_on: date) -> list[DeliveryRecord]:
+    @staticmethod
+    def _parse_delivery(content: bytes, observed_on: date) -> list[DeliveryRecord]:
         text = content.decode("utf-8", errors="replace")
         lines = text.splitlines()
         header_idx = -1
@@ -51,7 +52,8 @@ class MicrostructurePlugin(ArchiveDerivedPlugin):
             )
         return records
 
-    def _parse_deals(self, content: bytes, observed_on: date) -> list[BulkDealRecord]:
+    @staticmethod
+    def _parse_deals(content: bytes, observed_on: date) -> list[BulkDealRecord]:
         text = content.decode("utf-8", errors="replace")
         reader = csv.DictReader(io.StringIO(text))
         records: list[BulkDealRecord] = []

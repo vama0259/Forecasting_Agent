@@ -188,13 +188,88 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
     return t;
   });
 
+  function getFallbackR1Signal(name: ParticipantAgentName): AgentSignal {
+    return {
+      agent_name: name,
+      direction: 'down',
+      probability: 0.5,
+      confidence: 0.2,
+      horizon_days: 1,
+      degraded: true,
+      evidence: [
+        {
+          claim: 'Fallback signal due to degraded turn execution',
+          source_capability: 'market_data',
+          value: { status: 'fallback' },
+          explicit_absence: true,
+        },
+      ],
+    };
+  }
+
+  function getFallbackR2Signal(name: ParticipantAgentName): Round2Signal {
+    return {
+      agent_name: name,
+      round: 2,
+      direction: 'down',
+      probability: 0.5,
+      confidence: 0.2,
+      horizon_days: 1,
+      degraded: true,
+      critiques: [
+        {
+          target_agent: 'price',
+          agreement_level: 'partially_agree',
+          critique_point: 'Fallback critique due to degraded turn execution',
+        },
+      ],
+      probability_delta: 0,
+      evidence: [
+        {
+          claim: 'Fallback signal due to degraded turn execution',
+          source_capability: 'market_data',
+          value: { status: 'fallback' },
+          explicit_absence: true,
+        },
+      ],
+    };
+  }
+
+  function getFallbackR3Signal(name: ParticipantAgentName): Round3Signal {
+    return {
+      agent_name: name,
+      round: 3,
+      direction: 'down',
+      probability: 0.5,
+      confidence: 0.2,
+      horizon_days: 1,
+      degraded: true,
+      is_devils_advocate: false,
+      catastrophic_risks: ['Fallback risk notice'],
+      invalidation_triggers: ['Fallback invalidation trigger'],
+      evidence: [
+        {
+          claim: 'Fallback signal due to degraded turn execution',
+          source_capability: 'market_data',
+          value: { status: 'fallback' },
+          explicit_absence: true,
+        },
+      ],
+    };
+  }
+
   // ==========================================
   // ROUND 1: Initial Forecasts
   // ==========================================
   let round1Signals: Record<ParticipantAgentName, AgentSignal>;
 
   if (preR1) {
-    round1Signals = preR1;
+    round1Signals = {
+      price: preR1.price || getFallbackR1Signal('price'),
+      fii: preR1.fii || getFallbackR1Signal('fii'),
+      dii: preR1.dii || getFallbackR1Signal('dii'),
+      retail: preR1.retail || getFallbackR1Signal('retail'),
+    };
   } else if (invoker) {
     const r1Entries = await Promise.all(
       PARTICIPANTS.map(async (name) => {
@@ -205,7 +280,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
           horizon_days: 1,
         });
         const sig = (await invoker({ agentName: name, round: 1, prompt })) as AgentSignal;
-        return [name, AgentSignalSchema.parse(sig)] as const;
+        return [name, sig ? AgentSignalSchema.parse(sig) : getFallbackR1Signal(name)] as const;
       }),
     );
     round1Signals = Object.fromEntries(r1Entries) as Record<ParticipantAgentName, AgentSignal>;
@@ -232,22 +307,36 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
           schema: AgentSignalSchema,
         });
 
-        const sig = await invokeAgentTurn<AgentSignal>({
-          invoke: (invokeCfg) =>
-            agent.invoke(
-              { messages: [{ role: 'user', content: prompt }] },
-              { ...invokeCfg, ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {}) },
-            ),
-          schema: AgentSignalSchema,
-          trace: trace!,
-          turnId: `r1-${name}-${symbol}`,
-        });
-        return [name, sig] as const;
+        try {
+          const sig = await invokeAgentTurn<AgentSignal>({
+            invoke: (invokeCfg) =>
+              agent.invoke(
+                { messages: [{ role: 'user', content: prompt }] },
+                { ...invokeCfg, ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {}) },
+              ),
+            schema: AgentSignalSchema,
+            trace: trace!,
+            turnId: `r1-${name}-${symbol}`,
+          });
+          return [name, sig || getFallbackR1Signal(name)] as const;
+        } catch (turnErr) {
+          console.warn(
+            `[WARN] R1 turn failed for ${name}: ${turnErr instanceof Error ? turnErr.message : String(turnErr)}`,
+          );
+          return [name, getFallbackR1Signal(name)] as const;
+        }
       }),
     );
     round1Signals = Object.fromEntries(r1Entries) as Record<ParticipantAgentName, AgentSignal>;
   } else {
     throw new Error('Debate orchestration requires round1Signals, an invoker, or LLM config/tools/backend.');
+  }
+
+  // Guarantee all participants exist
+  for (const name of PARTICIPANTS) {
+    if (!round1Signals[name]) {
+      round1Signals[name] = getFallbackR1Signal(name);
+    }
   }
 
   // Persist Round 1 signals
@@ -262,7 +351,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
       direction: sig.direction,
       probability: sig.probability,
       confidence: sig.confidence,
-      degraded: !!sig.degraded,
+      degraded: sig.degraded,
       payload: sig as unknown as Record<string, unknown>,
     });
   }
@@ -273,7 +362,12 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
   let round2Signals: Record<ParticipantAgentName, Round2Signal>;
 
   if (preR2) {
-    round2Signals = preR2;
+    round2Signals = {
+      price: preR2.price || getFallbackR2Signal('price'),
+      fii: preR2.fii || getFallbackR2Signal('fii'),
+      dii: preR2.dii || getFallbackR2Signal('dii'),
+      retail: preR2.retail || getFallbackR2Signal('retail'),
+    };
   } else if (invoker) {
     const r2Entries = await Promise.all(
       PARTICIPANTS.map(async (name) => {
@@ -286,7 +380,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
           peer_signals: round1Signals,
         });
         const sig = (await invoker({ agentName: name, round: 2, prompt })) as Round2Signal;
-        return [name, Round2SignalSchema.parse(sig)] as const;
+        return [name, sig ? Round2SignalSchema.parse(sig) : getFallbackR2Signal(name)] as const;
       }),
     );
     round2Signals = Object.fromEntries(r2Entries) as Record<ParticipantAgentName, Round2Signal>;
@@ -315,22 +409,36 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
           schema: Round2SignalSchema,
         });
 
-        const sig = await invokeAgentTurn<Round2Signal>({
-          invoke: (invokeCfg) =>
-            agent.invoke(
-              { messages: [{ role: 'user', content: prompt }] },
-              { ...invokeCfg, ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {}) },
-            ),
-          schema: Round2SignalSchema,
-          trace: trace!,
-          turnId: `r2-${name}-${symbol}`,
-        });
-        return [name, sig] as const;
+        try {
+          const sig = await invokeAgentTurn<Round2Signal>({
+            invoke: (invokeCfg) =>
+              agent.invoke(
+                { messages: [{ role: 'user', content: prompt }] },
+                { ...invokeCfg, ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {}) },
+              ),
+            schema: Round2SignalSchema,
+            trace: trace!,
+            turnId: `r2-${name}-${symbol}`,
+          });
+          return [name, sig || getFallbackR2Signal(name)] as const;
+        } catch (turnErr) {
+          console.warn(
+            `[WARN] R2 turn failed for ${name}: ${turnErr instanceof Error ? turnErr.message : String(turnErr)}`,
+          );
+          return [name, getFallbackR2Signal(name)] as const;
+        }
       }),
     );
     round2Signals = Object.fromEntries(r2Entries) as Record<ParticipantAgentName, Round2Signal>;
   } else {
     throw new Error('Debate orchestration requires round2Signals, an invoker, or LLM config/tools/backend.');
+  }
+
+  // Guarantee all participants exist
+  for (const name of PARTICIPANTS) {
+    if (!round2Signals[name]) {
+      round2Signals[name] = getFallbackR2Signal(name);
+    }
   }
 
   // Persist Round 2 signals
@@ -345,7 +453,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
       direction: sig.direction,
       probability: sig.probability,
       confidence: sig.confidence,
-      degraded: !!sig.degraded,
+      degraded: sig.degraded,
       payload: sig as unknown as Record<string, unknown>,
     });
   }
@@ -361,7 +469,12 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
   let round3Signals: Record<ParticipantAgentName, Round3Signal>;
 
   if (preR3) {
-    round3Signals = preR3;
+    round3Signals = {
+      price: preR3.price || getFallbackR3Signal('price'),
+      fii: preR3.fii || getFallbackR3Signal('fii'),
+      dii: preR3.dii || getFallbackR3Signal('dii'),
+      retail: preR3.retail || getFallbackR3Signal('retail'),
+    };
   } else if (invoker) {
     const r3Entries = await Promise.all(
       PARTICIPANTS.map(async (name) => {
@@ -382,7 +495,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
           prompt,
           isDevilsAdvocate: isDA,
         })) as Round3Signal;
-        return [name, Round3SignalSchema.parse(sig)] as const;
+        return [name, sig ? Round3SignalSchema.parse(sig) : getFallbackR3Signal(name)] as const;
       }),
     );
     round3Signals = Object.fromEntries(r3Entries) as Record<ParticipantAgentName, Round3Signal>;
@@ -414,22 +527,36 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
           schema: Round3SignalSchema,
         });
 
-        const sig = await invokeAgentTurn<Round3Signal>({
-          invoke: (invokeCfg) =>
-            agent.invoke(
-              { messages: [{ role: 'user', content: prompt }] },
-              { ...invokeCfg, ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {}) },
-            ),
-          schema: Round3SignalSchema,
-          trace: trace!,
-          turnId: `r3-${name}-${symbol}`,
-        });
-        return [name, sig] as const;
+        try {
+          const sig = await invokeAgentTurn<Round3Signal>({
+            invoke: (invokeCfg) =>
+              agent.invoke(
+                { messages: [{ role: 'user', content: prompt }] },
+                { ...invokeCfg, ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {}) },
+              ),
+            schema: Round3SignalSchema,
+            trace: trace!,
+            turnId: `r3-${name}-${symbol}`,
+          });
+          return [name, sig || getFallbackR3Signal(name)] as const;
+        } catch (turnErr) {
+          console.warn(
+            `[WARN] R3 turn failed for ${name}: ${turnErr instanceof Error ? turnErr.message : String(turnErr)}`,
+          );
+          return [name, getFallbackR3Signal(name)] as const;
+        }
       }),
     );
     round3Signals = Object.fromEntries(r3Entries) as Record<ParticipantAgentName, Round3Signal>;
   } else {
     throw new Error('Debate orchestration requires round3Signals, an invoker, or LLM config/tools/backend.');
+  }
+
+  // Guarantee all participants exist
+  for (const name of PARTICIPANTS) {
+    if (!round3Signals[name]) {
+      round3Signals[name] = getFallbackR3Signal(name);
+    }
   }
 
   // Persist Round 3 signals
@@ -444,7 +571,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
       direction: sig.direction,
       probability: sig.probability,
       confidence: sig.confidence,
-      degraded: !!sig.degraded,
+      degraded: sig.degraded,
       payload: sig as unknown as Record<string, unknown>,
     });
   }

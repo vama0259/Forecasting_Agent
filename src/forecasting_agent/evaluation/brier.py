@@ -11,7 +11,7 @@ BIN_EDGES: NDArray[np.float64] = np.linspace(0.0, 1.0, 11)
 
 def bull_labels(returns: NDArray[np.float64]) -> NDArray[np.int_]:
     """Takes returns array; returns binary indicator array where positive returns are 1 and non-positive are 0."""
-    return (returns > 0.0).astype(int)
+    return np.where(returns > 0.0, 1, 0)
 
 
 def brier(calls: NDArray[np.float64], returns: NDArray[np.float64]) -> float:

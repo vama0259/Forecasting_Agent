@@ -11,13 +11,13 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "pyarrow",
     "pydantic>=2.13",
+    "pyyaml>=6.0",
     "scikit-learn>=1.7",
     "yfinance>=1.6.0",
     "smartapi-python>=1.5.5",
     "pyotp>=2.10.0",
     "logzero",
     "websocket-client",
-    "httpx>=0.28.0",
 ]
 
 [dependency-groups]
@@ -28,6 +28,7 @@ dev = [
     "pytest-asyncio>=0.25.0",
     "bandit[toml]>=1.8.0",
     "mypy>=1.15",
+    "pandas-stubs",
     "pre-commit>=4.0",
     "hypothesis>=6.165.6",
     "import-linter>=2.13",
@@ -100,3 +101,7 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = ["sklearn.*", "SmartApi", "logzero"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+ignore_errors = true

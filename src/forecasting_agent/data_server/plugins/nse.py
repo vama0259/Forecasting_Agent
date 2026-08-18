@@ -2,7 +2,7 @@
 
 from datetime import date
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 import yfinance as yf  # type: ignore[import-untyped]
 
 from forecasting_agent.data_server.contracts import OHLCVBar
@@ -32,7 +32,7 @@ class NsePlugin(MarketPlugin):
 
         bars: list[OHLCVBar] = []
         for idx, row in df.iterrows():
-            bar_date = idx.date() if hasattr(idx, "date") else pd.to_datetime(idx).date()
+            bar_date: date = date.fromisoformat(str(idx)[:10])
             bars.append(
                 OHLCVBar(
                     date=bar_date,

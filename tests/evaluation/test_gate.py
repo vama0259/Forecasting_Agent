@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from forecasting_agent.evaluation.gate import run_gate
-from forecasting_agent.evaluation.types import EvalRequest
+from forecasting_agent.evaluation.types import EvalRequest, TradeSide
 from forecasting_agent.evaluation.walk_forward import PurgedWalkForward
 
 
@@ -14,6 +14,7 @@ def _request(returns: list[float], *, as_of_offset_days: int = 3650) -> EvalRequ
     """Takes a return series and an as_of offset; returns a coherent all-hold EvalRequest over it."""
     n = len(returns)
     start = datetime(2025, 1, 1, tzinfo=UTC)
+    trade_side: list[TradeSide] = ["hold"] * n
     return EvalRequest(
         returns=returns,
         forecasts=[0.0] * n,
@@ -22,7 +23,7 @@ def _request(returns: list[float], *, as_of_offset_days: int = 3650) -> EvalRequ
         as_of=start + timedelta(days=as_of_offset_days),
         segment="EQUITY_DELIVERY",
         position_notional=[10_000.0] * n,
-        trade_side=["hold"] * n,
+        trade_side=trade_side,
         capital=1_000_000.0,
     )
 
@@ -127,6 +128,9 @@ def test_gate_does_not_call_the_mase_metric(monkeypatch: pytest.MonkeyPatch) -> 
     def _explode(*_args: object, **_kwargs: object) -> float:
         raise AssertionError("gate must not invoke mase()")
 
-    monkeypatch.setattr(gate_module, "mase", _explode, raising=False)
-    verdict = run_gate(_request(_varied(60)), PurgedWalkForward(n_splits=3, gap=2, horizon=1))
-    assert verdict.status == "VALID"
+    setattr(gate_module, "mase", _explode)  # noqa: B010
+    try:
+        verdict = run_gate(_request(_varied(60)), PurgedWalkForward(n_splits=3, gap=2, horizon=1))
+        assert verdict.status == "VALID"
+    finally:
+        delattr(gate_module, "mase")

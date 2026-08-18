@@ -3,6 +3,8 @@
 from datetime import date
 from unittest.mock import patch
 
+import pytest
+
 from forecasting_agent.data_server.contracts import OHLCVBar
 
 
@@ -74,22 +76,24 @@ def test_stale_fallback_does_not_archive(mock_cache_cls, mock_resolve, mock_stor
     mock_store.write.assert_not_called()
 
 
-@patch("forecasting_agent.data_server.server.ObservationStore")
-@patch("forecasting_agent.data_server.server.resolve")
-@patch("forecasting_agent.data_server.server.ParquetCache")
-def test_archive_write_failure_is_logged_not_raised(mock_cache_cls, mock_resolve, mock_store_cls, caplog):
+def test_archive_write_failure_is_logged_not_raised(caplog: pytest.LogCaptureFixture) -> None:
     from forecasting_agent.archive.errors import ArchiveWriteError
     from forecasting_agent.data_server.server import fetch_ohlcv
 
-    mock_cache = mock_cache_cls.return_value
-    mock_cache.get.return_value = None
-    mock_cache.is_stale.return_value = True
-    mock_plugin = mock_resolve.return_value
-    mock_plugin.fetch.return_value = [_bar(date(2026, 8, 14))]
-    mock_plugin.supports.return_value = True
-    mock_store = mock_store_cls.return_value
-    mock_store.write.side_effect = ArchiveWriteError("db down")
+    with (
+        patch("forecasting_agent.data_server.server.ObservationStore") as mock_store_cls,
+        patch("forecasting_agent.data_server.server.resolve") as mock_resolve,
+        patch("forecasting_agent.data_server.server.ParquetCache") as mock_cache_cls,
+    ):
+        mock_cache = mock_cache_cls.return_value
+        mock_cache.get.return_value = None
+        mock_cache.is_stale.return_value = True
+        mock_plugin = mock_resolve.return_value
+        mock_plugin.fetch.return_value = [_bar(date(2026, 8, 14))]
+        mock_plugin.supports.return_value = True
+        mock_store = mock_store_cls.return_value
+        mock_store.write.side_effect = ArchiveWriteError("db down")
 
-    result = fetch_ohlcv("RELIANCE.NS", "NSE", "2026-08-01", "2026-08-14")
+        result = fetch_ohlcv("RELIANCE.NS", "NSE", "2026-08-01", "2026-08-14")
 
-    assert result is not None  # fetch_ohlcv still returns normally
+        assert result is not None  # fetch_ohlcv still returns normally

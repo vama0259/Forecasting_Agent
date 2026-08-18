@@ -7,11 +7,44 @@ export interface SymbolOption {
   name: string;
   sector: string;
   isPopular?: boolean;
+  aliases?: string[];
 }
 
 export const NSE_STOCK_UNIVERSE: SymbolOption[] = [
-  { symbol: 'SBIFUNDS.NS', name: 'SBI Funds Management Limited', sector: 'Asset Management / Financials', isPopular: true },
-  { symbol: 'SBIN.NS', name: 'State Bank of India', sector: 'Public Sector Banking', isPopular: true },
+  {
+    symbol: 'SBIFUNDS.NS',
+    name: 'SBI Funds Management (SBI Mutual Fund)',
+    sector: 'Asset Management / Mutual Funds',
+    isPopular: true,
+    aliases: ['sbi mutual fund', 'sbi mf', 'sbi funds', 'sbifunds', 'sbi amc'],
+  },
+  {
+    symbol: 'SBIN.NS',
+    name: 'State Bank of India (SBI)',
+    sector: 'Public Sector Banking',
+    isPopular: true,
+    aliases: ['sbi', 'state bank', 'sbi bank'],
+  },
+  {
+    symbol: 'HDFCAMC.NS',
+    name: 'HDFC Asset Management (HDFC Mutual Fund)',
+    sector: 'Asset Management / Mutual Funds',
+    isPopular: true,
+    aliases: ['hdfc mutual fund', 'hdfc amc', 'hdfc mf'],
+  },
+  {
+    symbol: 'NAM-INDIA.NS',
+    name: 'Nippon Life India AMC (Nippon Mutual Fund)',
+    sector: 'Asset Management / Mutual Funds',
+    isPopular: true,
+    aliases: ['nippon mutual fund', 'nippon mf', 'nippon amc', 'reliance mutual fund'],
+  },
+  {
+    symbol: 'UTIAMC.NS',
+    name: 'UTI Asset Management (UTI Mutual Fund)',
+    sector: 'Asset Management / Mutual Funds',
+    aliases: ['uti mutual fund', 'uti amc', 'uti mf'],
+  },
   { symbol: 'HDFCBANK.NS', name: 'HDFC Bank Limited', sector: 'Private Banking', isPopular: true },
   { symbol: 'TCS.NS', name: 'Tata Consultancy Services', sector: 'Information Technology', isPopular: true },
   { symbol: 'RELIANCE.NS', name: 'Reliance Industries Limited', sector: 'Energy / Retail / Telecom', isPopular: true },
@@ -29,9 +62,6 @@ export const NSE_STOCK_UNIVERSE: SymbolOption[] = [
   { symbol: 'MARUTI.NS', name: 'Maruti Suzuki India Limited', sector: 'Automobiles' },
   { symbol: 'SUNPHARMA.NS', name: 'Sun Pharmaceutical Industries', sector: 'Pharmaceuticals' },
   { symbol: 'ZOMATO.NS', name: 'Zomato Limited', sector: 'Internet / Consumer Tech', isPopular: true },
-  { symbol: 'NAM-INDIA.NS', name: 'Nippon Life India Asset Management', sector: 'Asset Management / Financials' },
-  { symbol: 'HDFCAMC.NS', name: 'HDFC Asset Management Company', sector: 'Asset Management / Financials' },
-  { symbol: 'UTIAMC.NS', name: 'UTI Asset Management Company', sector: 'Asset Management / Financials' },
   { symbol: 'WIPRO.NS', name: 'Wipro Limited', sector: 'Information Technology' },
   { symbol: 'HCLTECH.NS', name: 'HCL Technologies Limited', sector: 'Information Technology' },
   { symbol: 'NTPC.NS', name: 'NTPC Limited', sector: 'Power / Utilities' },
@@ -62,7 +92,8 @@ export async function GET(request?: NextRequest | Request) {
     (item) =>
       item.symbol.toLowerCase().includes(query!) ||
       item.name.toLowerCase().includes(query!) ||
-      item.sector.toLowerCase().includes(query!)
+      item.sector.toLowerCase().includes(query!) ||
+      item.aliases?.some((a) => a.toLowerCase().includes(query!))
   );
 
   return NextResponse.json({ symbols: filtered });

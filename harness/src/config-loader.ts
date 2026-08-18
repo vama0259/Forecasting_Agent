@@ -3,7 +3,7 @@ import { parse } from 'yaml';
 import { HarnessConfigSchema, LLM_TARGET, type HarnessConfig } from './config.js';
 import { ConfigValidationError } from './errors.js';
 
-const VAR_PATTERN = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+const VAR_PATTERN = /\$\{([A-Za-z_][A-Za-z0-9_]*)}/g;
 
 class Interpolator {
   readonly used = new Set<string>();

@@ -3,7 +3,7 @@
 from datetime import date
 from pathlib import Path
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 
 from forecasting_agent.data_server.contracts import OHLCVBar
 
@@ -42,7 +42,7 @@ class ParquetCache:
 
         try:
             df = pd.read_parquet(file_path)
-        except Exception:
+        except (ValueError, OSError, RuntimeError):
             return None
 
         records = df.to_dict(orient="records")
