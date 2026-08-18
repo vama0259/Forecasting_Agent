@@ -10,6 +10,35 @@ from forecasting_agent.evaluation.types import EvalRequest, Fold, FoldSkipReason
 from forecasting_agent.evaluation.walk_forward import PurgedWalkForward
 
 
+def _format_degenerate_detail(d: float) -> str:
+    if math.isnan(d):
+        formatted_val = "nan"
+    elif math.isinf(d):
+        formatted_val = "inf"
+    else:
+        formatted_val = "0.0"
+    return f"mean(|Δy_train|) = {formatted_val}"
+
+
+def _check_fold(
+    fold_idx: int,
+    train_idx: list[int],
+    test_idx: list[int],
+    min_train_size: int,
+    returns_arr: np.ndarray,
+) -> tuple[Fold | None, FoldSkipReason | None]:
+    if len(train_idx) < min_train_size:
+        detail = f"train size {len(train_idx)} < min_train_size {min_train_size}"
+        return None, FoldSkipReason(fold_number=fold_idx, reason="below_min_train_size", detail=detail)
+
+    d = train_baseline(returns_arr[train_idx])
+    if (not math.isfinite(d)) or math.isclose(d, 0.0, abs_tol=1e-15):
+        detail = _format_degenerate_detail(d)
+        return None, FoldSkipReason(fold_number=fold_idx, reason="degenerate_baseline", detail=detail)
+
+    return Fold(train_idx=train_idx, test_idx=test_idx, fold_number=fold_idx), None
+
+
 def run_gate(request: EvalRequest, splitter: PurgedWalkForward) -> GateVerdict:
     """Takes evaluation request and walk-forward splitter; returns GateVerdict with surviving and skipped folds."""
     reasons: list[str] = []
@@ -28,17 +57,11 @@ def run_gate(request: EvalRequest, splitter: PurgedWalkForward) -> GateVerdict:
     skipped: list[FoldSkipReason] = []
 
     for i, (train_idx, test_idx) in enumerate(splits):
-        if len(train_idx) < splitter.min_train_size:
-            detail = f"train size {len(train_idx)} < min_train_size {splitter.min_train_size}"
-            skipped.append(FoldSkipReason(fold_number=i, reason="below_min_train_size", detail=detail))
-        else:
-            d = train_baseline(returns_arr[train_idx])
-            if (not math.isfinite(d)) or d == 0.0:
-                token = "nan" if math.isnan(d) else ("inf" if math.isinf(d) else "0.0")
-                detail = f"mean(|Δy_train|) = {token}"
-                skipped.append(FoldSkipReason(fold_number=i, reason="degenerate_baseline", detail=detail))
-            else:
-                survivors.append(Fold(train_idx=train_idx.tolist(), test_idx=test_idx.tolist(), fold_number=i))
+        fold, skip = _check_fold(i, train_idx.tolist(), test_idx.tolist(), splitter.min_train_size, returns_arr)
+        if skip is not None:
+            skipped.append(skip)
+        elif fold is not None:
+            survivors.append(fold)
 
     if len(survivors) < 2:
         reasons.append("insufficient_valid_folds")

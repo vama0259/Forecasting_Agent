@@ -29,7 +29,7 @@ def naive_forecast(y_train: NDArray[np.float64], y_test: NDArray[np.float64]) ->
 def mase(y_train: NDArray[np.float64], y_test: NDArray[np.float64], forecast: NDArray[np.float64]) -> float:
     """Takes train, test, and forecast arrays; returns mean absolute scaled error or raises on degenerate baseline."""
     d = train_baseline(y_train)
-    if (not math.isfinite(d)) or d == 0.0:
+    if (not math.isfinite(d)) or math.isclose(d, 0.0, abs_tol=1e-15):
         raise DegenerateBaselineError(f"mean(|Δy_train|) = {d}")
     return float(np.mean(np.abs(y_test - forecast)) / d)
 

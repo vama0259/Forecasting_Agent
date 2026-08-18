@@ -96,6 +96,48 @@ def resolve_symbol(symbol: str, market: str) -> SymbolMeta:
     )
 
 
+def _fetch_raw_ohlcv(
+    plugin: Any,
+    cache: ParquetCache,
+    symbol: str,
+    market: str,
+    start_date: date,
+    end_date: date,
+) -> tuple[list[OHLCVBar], bool, bool]:
+    cached_bars = cache.get(symbol, market)
+    is_cache_stale = cache.is_stale(symbol, market)
+    cache_covers_request = cache.covers_range(symbol, market, start_date, end_date)
+
+    def in_range(bars: list[OHLCVBar]) -> list[OHLCVBar]:
+        return [b for b in bars if start_date <= b.date <= end_date]
+
+    if cached_bars is not None and not is_cache_stale and cache_covers_request:
+        return in_range(cached_bars), False, False
+
+    try:
+        fetched_bars = plugin.fetch(symbol, start=start_date, end=end_date)
+        if fetched_bars:
+            return in_range(fetched_bars), False, True
+        if cached_bars is not None and cache_covers_request:
+            return in_range(cached_bars), True, False
+        return [], False, False
+    except Exception:
+        if cached_bars is not None and cache_covers_request:
+            return in_range(cached_bars), True, False
+        raise
+
+
+def _archive_ohlcv_snapshot(market: str, symbol: str, bars: list[OHLCVBar]) -> None:
+    try:
+        ObservationStore().write(
+            source=f"ohlcv:{market.upper()}:{symbol}",
+            observed_on=date.today(),  # noqa: DTZ011 -- matches is_stale()'s existing precedent at cache.py
+            content=_serialize_bars(bars),
+        )
+    except ArchiveWriteError:
+        logger.exception("Failed to archive OHLCV snapshot for %s/%s", market, symbol)
+
+
 @app.tool()
 def fetch_ohlcv(
     symbol: str,
@@ -105,77 +147,51 @@ def fetch_ohlcv(
     as_of: str | None = None,
 ) -> OHLCVResponse:
     # Fetch, clean, normalize, and filter daily OHLCV bars for a symbol.
-    # 1. Resolve plugin
     plugin = resolve(market)
-
-    # 2. Check cache; fetch from plugin only on cache miss, when stale, or when the cached
-    # series doesn't actually cover the requested range (#36 -- a recent-window cache entry
-    # must never be served for an unrelated, older request).
     cache = ParquetCache()
     start_date = date.fromisoformat(start) if isinstance(start, str) else start
     end_date = date.fromisoformat(end) if isinstance(end, str) else end
 
-    cached_bars = cache.get(symbol, market)
-    is_cache_stale = cache.is_stale(symbol, market)
-    cache_covers_request = cache.covers_range(symbol, market, start_date, end_date)
+    raw_bars, data_stale, freshly_fetched = _fetch_raw_ohlcv(plugin, cache, symbol, market, start_date, end_date)
 
-    data_stale = False
-    freshly_fetched = False
-
-    def _bars_in_range(bars: list[OHLCVBar]) -> list[OHLCVBar]:
-        return [b for b in bars if start_date <= b.date <= end_date]
-
-    if cached_bars is not None and not is_cache_stale and cache_covers_request:
-        raw_bars = _bars_in_range(cached_bars)
-    else:
-        try:
-            fetched_bars = plugin.fetch(symbol, start=start_date, end=end_date)
-            if fetched_bars:
-                raw_bars = _bars_in_range(fetched_bars)
-                freshly_fetched = True
-                data_stale = False
-            elif cached_bars is not None and cache_covers_request:
-                raw_bars = _bars_in_range(cached_bars)
-                data_stale = True
-            else:
-                raw_bars = []
-        except Exception:
-            if cached_bars is not None and cache_covers_request:
-                raw_bars = _bars_in_range(cached_bars)
-                data_stale = True
-            else:
-                raise
-
-    # 3. Outlier cleaning
     cleaned_bars = hampel_clip(raw_bars)
     cleaned_bars = flag_circuit_locked(cleaned_bars)
-
-    # 4. Calendar alignment
     normalized_bars = align_calendar(cleaned_bars)
 
-    # 7. Cache freshly fetched (pre-filter, cleaned+normalized) result
     if freshly_fetched:
         cache.put(symbol, market, normalized_bars)
-        try:
-            ObservationStore().write(
-                source=f"ohlcv:{market.upper()}:{symbol}",
-                observed_on=date.today(),  # noqa: DTZ011 -- matches is_stale()'s existing precedent at cache.py
-                content=_serialize_bars(normalized_bars),
-            )
-        except ArchiveWriteError:
-            logger.error("Failed to archive OHLCV snapshot for %s/%s", market, symbol, exc_info=True)
+        _archive_ohlcv_snapshot(market, symbol, normalized_bars)
 
-    # 5. Point-in-time filtering (MUST run last)
     as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
     filtered_bars = filter_as_of(normalized_bars, as_of=as_of_date)
 
-    # 6. Wrap in OHLCVResponse
     return OHLCVResponse(
         symbol=symbol,
         market=market.upper(),
         bars=filtered_bars,
         data_stale=data_stale,
     )
+
+
+def _validate_fno_as_of(as_of: str | None) -> None:
+    if as_of is not None:
+        as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
+        today = date.today()  # noqa: DTZ011
+        if as_of_date > today:
+            raise LeakageError(f"as_of date {as_of_date} is in the future relative to today ({today})")
+
+
+def _populate_option_side(df: Any, strikes_map: dict[float, dict[str, Any]], prefix: str) -> None:
+    if df is None or df.empty:
+        return
+    ltp_key = f"{prefix}_ltp"
+    oi_key = f"{prefix}_oi"
+    for _, row in df.iterrows():
+        strike = float(row.get("strike", 0.0))
+        if strike <= 0:
+            continue
+        strikes_map.setdefault(strike, {})[ltp_key] = float(row.get("lastPrice", 0.0) or 0.0)
+        strikes_map[strike][oi_key] = int(row.get("openInterest", 0) or 0)
 
 
 @app.tool()
@@ -185,11 +201,7 @@ def fetch_option_chain(
     as_of: str | None = None,
 ) -> FnOChainResponse:
     """Fetch option chain for an underlying and expiry (defaults to nearest available expiry cycle if omitted)."""
-    if as_of is not None:
-        as_of_date = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
-        today = date.today()  # noqa: DTZ011
-        if as_of_date > today:
-            raise LeakageError(f"as_of date {as_of_date} is in the future relative to today ({today})")
+    _validate_fno_as_of(as_of)
 
     ticker_symbol = underlying
     if not ticker_symbol.endswith((".NS", ".BO")) and not ticker_symbol.startswith("^"):
@@ -209,39 +221,21 @@ def fetch_option_chain(
 
         resolved_expiry_date = date.fromisoformat(target_expiry)
         chain = ticker.option_chain(target_expiry) if target_expiry in options else ticker.option_chain()
-        calls_df = chain.calls
-        puts_df = chain.puts
-
-        if calls_df is not None and not calls_df.empty:
-            for _, row in calls_df.iterrows():
-                strike = float(row.get("strike", 0.0))
-                if strike <= 0:
-                    continue
-                strikes_map.setdefault(strike, {})["call_ltp"] = float(row.get("lastPrice", 0.0) or 0.0)
-                strikes_map[strike]["call_oi"] = int(row.get("openInterest", 0) or 0)
-
-        if puts_df is not None and not puts_df.empty:
-            for _, row in puts_df.iterrows():
-                strike = float(row.get("strike", 0.0))
-                if strike <= 0:
-                    continue
-                strikes_map.setdefault(strike, {})["put_ltp"] = float(row.get("lastPrice", 0.0) or 0.0)
-                strikes_map[strike]["put_oi"] = int(row.get("openInterest", 0) or 0)
+        _populate_option_side(chain.calls, strikes_map, "call")
+        _populate_option_side(chain.puts, strikes_map, "put")
     except Exception as exc:
         logger.debug("Failed to fetch option chain for %s (%s): %s", ticker_symbol, expiry, exc)
 
-    strikes: list[StrikeData] = []
-    for strike_price in sorted(strikes_map.keys()):
-        info = strikes_map[strike_price]
-        strikes.append(
-            StrikeData(
-                strike_price=strike_price,
-                call_oi=max(0, info.get("call_oi", 0)),
-                put_oi=max(0, info.get("put_oi", 0)),
-                call_ltp=max(0.0, info.get("call_ltp", 0.0)),
-                put_ltp=max(0.0, info.get("put_ltp", 0.0)),
-            )
+    strikes: list[StrikeData] = [
+        StrikeData(
+            strike_price=strike_price,
+            call_oi=max(0, info.get("call_oi", 0)),
+            put_oi=max(0, info.get("put_oi", 0)),
+            call_ltp=max(0.0, info.get("call_ltp", 0.0)),
+            put_ltp=max(0.0, info.get("put_ltp", 0.0)),
         )
+        for strike_price, info in sorted(strikes_map.items())
+    ]
 
     return FnOChainResponse(
         underlying=underlying,

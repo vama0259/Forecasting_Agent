@@ -13,6 +13,13 @@ USER_AGENT = (
 )
 
 
+def _backoff_sleep(attempt: int) -> None:
+    if attempt == 1:
+        time.sleep(2)
+    elif attempt == 2:
+        time.sleep(4)
+
+
 class NseParticipantOiDownloader(Downloader):
     # Downloads daily participant-wise derivative open interest reports from NSE archives.
 
@@ -23,21 +30,15 @@ class NseParticipantOiDownloader(Downloader):
         headers = {"User-Agent": USER_AGENT}
 
         for attempt in range(3):
-            if attempt == 1:
-                time.sleep(2)
-            elif attempt == 2:
-                time.sleep(4)
+            _backoff_sleep(attempt)
             try:
                 resp = httpx.get(url, headers=headers, timeout=30.0)
                 if resp.status_code == 200:
                     return resp.content
                 if resp.status_code == 404:
                     raise SourceUnavailableError(f"Participant OI not found: {url}")
-                if resp.status_code >= 500:
-                    if attempt == 2:
-                        resp.raise_for_status()
-                    continue
-                resp.raise_for_status()
+                if resp.status_code < 500 or attempt == 2:
+                    resp.raise_for_status()
             except (httpx.TransportError, httpx.TimeoutException):
                 if attempt == 2:
                     raise

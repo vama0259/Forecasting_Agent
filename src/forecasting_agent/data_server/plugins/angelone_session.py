@@ -58,33 +58,35 @@ class AngelOneSession:
         # with an identical Authorization header, so callers must reuse this instance, not build their own.
         return self._client
 
-    def get_valid_token(self) -> str:
-        # Returns a valid JWT access token, refreshing or re-authenticating if expired.
-        if (
+    def _is_token_valid(self) -> bool:
+        return (
             self._jwt_token is not None
             and self._token_expiry is not None
             and self._token_expiry > 0.0
             and time.monotonic() < self._token_expiry
-        ):
-            return self._jwt_token
+        )
 
-        if self._refresh_token is not None:
-            try:
-                self._rate_limit_gate()
-                response = self._client.generateToken(self._refresh_token)
-                if response.get("status"):
-                    data = response.get("data")
-                    jwt = data.get("jwtToken") if hasattr(data, "get") else None
-                    if jwt:
-                        self._jwt_token = _strip_bearer_prefix(str(jwt))
-                        self._token_expiry = (self._last_call_time or 0.0) + 9000.0
-                        refresh = data.get("refreshToken") if hasattr(data, "get") else None
-                        if refresh:
-                            self._refresh_token = str(refresh)
-                        return self._jwt_token
-            except KeyError:
-                pass
+    def _try_refresh_token(self) -> str | None:
+        if self._refresh_token is None:
+            return None
+        try:
+            self._rate_limit_gate()
+            response = self._client.generateToken(self._refresh_token)
+            if response.get("status"):
+                data = response.get("data")
+                jwt = data.get("jwtToken") if hasattr(data, "get") else None
+                if jwt:
+                    self._jwt_token = _strip_bearer_prefix(str(jwt))
+                    self._token_expiry = (self._last_call_time or 0.0) + 9000.0
+                    refresh = data.get("refreshToken") if hasattr(data, "get") else None
+                    if refresh:
+                        self._refresh_token = str(refresh)
+                    return self._jwt_token
+        except KeyError:
+            pass
+        return None
 
+    def _authenticate_with_totp(self) -> str:
         totp = pyotp.TOTP(self._credentials.totp_secret).now()
         self._rate_limit_gate()
         response = self._client.generateSession(self._credentials.client_code, self._credentials.mpin, totp)
@@ -96,3 +98,14 @@ class AngelOneSession:
         self._refresh_token = str(response["data"]["refreshToken"])
         self._token_expiry = (self._last_call_time or 0.0) + 9000.0
         return self._jwt_token
+
+    def get_valid_token(self) -> str:
+        # Returns a valid JWT access token, refreshing or re-authenticating if expired.
+        if self._is_token_valid() and self._jwt_token is not None:
+            return self._jwt_token
+
+        refreshed = self._try_refresh_token()
+        if refreshed is not None:
+            return refreshed
+
+        return self._authenticate_with_totp()

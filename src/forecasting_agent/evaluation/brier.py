@@ -16,7 +16,8 @@ def bull_labels(returns: NDArray[np.float64]) -> NDArray[np.int_]:
 
 def brier(calls: NDArray[np.float64], returns: NDArray[np.float64]) -> float:
     """Takes calls and returns arrays; returns half-scaled Brier score loss."""
-    return float(brier_score_loss(bull_labels(returns), calls, scale_by_half=True))
+    kwargs = {"scale_by_half": True}
+    return float(brier_score_loss(bull_labels(returns), calls, **kwargs))
 
 
 def calibration_bins(calls: NDArray[np.float64], returns: NDArray[np.float64]) -> list[CalibrationBin]:

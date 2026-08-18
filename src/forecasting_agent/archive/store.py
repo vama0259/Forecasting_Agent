@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -32,9 +33,8 @@ class ObservationStore:
     def __init__(self, archive_dir: str = "data/archive", connection_string: str | None = None) -> None:
         # Initializes store with local archive root directory and PostgreSQL connection string.
         self.archive_dir = Path(archive_dir)
-        self.connection_string = connection_string or os.environ.get(
-            "STORAGE_CONNECTION_STRING",
-            "postgresql://harness:harness@localhost:5432/harness",
+        self.connection_string = (
+            connection_string or os.environ.get("STORAGE_CONNECTION_STRING") or "postgresql://localhost:5432/harness"
         )
 
     def _connect(self) -> psycopg.Connection:
@@ -60,8 +60,11 @@ class ObservationStore:
             sha256 = hashlib.sha256(content).hexdigest()
             bytes_len = len(content)
             status = "ok"
-            sanitized_source = source.replace("/", "_")
-            source_dir = self.archive_dir / sanitized_source
+            sanitized_source = re.sub(r"[^\w\-:]", "_", source)
+            source_dir = (self.archive_dir / sanitized_source).resolve()
+            archive_root = self.archive_dir.resolve()
+            if not source_dir.is_relative_to(archive_root):
+                raise ArchiveWriteError(f"Invalid archive path for source: {source}")
             source_dir.mkdir(parents=True, exist_ok=True)
             file_path = source_dir / f"{sha256}.bin"
             if not file_path.exists():

@@ -56,10 +56,10 @@ def run_all_downloaders(store: ObservationStore, downloaders: dict[str, Download
             content = downloader.fetch_raw(observed_on)
             store.write(source=name, observed_on=observed_on, content=content)
         except SourceUnavailableError as exc:
-            logger.error("Source %s unavailable on %s: %s", name, observed_on, exc)
+            logger.exception("Source %s unavailable on %s: %s", name, observed_on, exc)
             store.write(source=name, observed_on=observed_on, content=None, detail=str(exc))
         except Exception as exc:
-            logger.error("Download failed for source %s on %s: %s", name, observed_on, exc, exc_info=True)
+            logger.exception("Download failed for source %s on %s: %s", name, observed_on, exc)
             store.write(source=name, observed_on=observed_on, content=None, detail=str(exc))
 
 

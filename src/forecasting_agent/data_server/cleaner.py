@@ -51,7 +51,12 @@ def hampel_clip(
         bound = threshold * mad
 
         if abs(diff) > bound:
-            sign = 1.0 if diff > 0 else (-1.0 if diff < 0 else 0.0)
+            if diff > 0:
+                sign = 1.0
+            elif diff < 0:
+                sign = -1.0
+            else:
+                sign = 0.0
             clipped_close = med + sign * bound
             # In rare numerical float precision cases, ensure clipped_close stays positive
             clipped_close = max(clipped_close, 1e-6)
