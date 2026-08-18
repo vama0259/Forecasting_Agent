@@ -2,7 +2,7 @@ name: SonarCloud Analysis
 
 on:
   push:
-    branches: [main, dev]
+    branches: [master, dev]
   pull_request:
     branches: [dev, prod]
 
