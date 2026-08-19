@@ -24,6 +24,7 @@ from forecasting_agent.data_server.contracts import (
     SymbolMeta,
 )
 from forecasting_agent.data_server.normalizer import align_calendar
+from forecasting_agent.data_server.plugins.angelone_options import AngelOneOptionChainPlugin
 from forecasting_agent.data_server.point_in_time import LeakageError, filter_as_of
 from forecasting_agent.data_server.registry import get_registry, resolve
 
@@ -202,6 +203,20 @@ def fetch_option_chain(
 ) -> FnOChainResponse:
     """Fetch option chain for an underlying and expiry (defaults to nearest available expiry cycle if omitted)."""
     _validate_fno_as_of(as_of)
+    as_of_date = date.fromisoformat(as_of) if as_of else None
+
+    # Angel One first -- yfinance has zero option-chain coverage for NSE tickers (confirmed:
+    # yf.Ticker("<sym>.NS").options is always empty). Fall back to yfinance only if Angel One
+    # is unconfigured/unreachable, matching the equity connector's primary/fallback pattern (ADR-032).
+    try:
+        angel_expiry, angel_strikes = AngelOneOptionChainPlugin().fetch_chain(
+            underlying, expiry=expiry, as_of=as_of_date
+        )
+        return FnOChainResponse(underlying=underlying, expiry=angel_expiry, strikes=angel_strikes, data_stale=False)
+    except Exception as exc:
+        logger.debug(
+            "Angel One option chain fetch failed for %s (%s), falling back to yfinance: %s", underlying, expiry, exc
+        )
 
     ticker_symbol = underlying
     if not ticker_symbol.endswith((".NS", ".BO")) and not ticker_symbol.startswith("^"):
@@ -226,7 +241,7 @@ def fetch_option_chain(
     except Exception as exc:
         logger.debug("Failed to fetch option chain for %s (%s): %s", ticker_symbol, expiry, exc)
 
-    strikes: list[StrikeData] = [
+    strikes = [
         StrikeData(
             strike_price=strike_price,
             call_oi=max(0, info.get("call_oi", 0)),
