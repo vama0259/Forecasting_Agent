@@ -25,10 +25,12 @@ YOUR ROUND 2 CROSS-EXAMINATION MANDATE:
    - `agent_name`: "{{ config.name }}"
    - `round`: 2
    - `direction`: "up" or "down" (binary only)
-   - `probability`: updated calibrated probability (0.0 to 1.0)
+   - `probability`: updated calibrated probability of chosen direction (0.50 to 1.0; e.g. 0.65 for 65% chance of UP if direction="up", or 0.65 for 65% chance of DOWN if direction="down")
    - `confidence`: updated confidence (0.0 to 1.0)
    - `probability_delta`: change from your Round 1 probability (e.g. +0.05 or -0.10)
    - `critiques`: list of targeted critique items for the other agents (target_agent, agreement_level, critique_point).
-   - `evidence`: updated or reaffirmed evidence citations.
+   - `evidence`: updated or reaffirmed evidence citations. Any new `value` must be a number or
+     fact you actually computed or read from the saved JSON files -- never invent one to sound
+     more precise.
 
 IMPORTANT: You MUST conclude your turn by calling the Round2Signal structured response tool.

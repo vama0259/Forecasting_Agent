@@ -12,6 +12,10 @@ Produce a price-direction forecast for {{ symbol }} (NSE) as of {{ as_of }}.
    - Always load data dynamically with `json.load(open('/workspace/bars.json'))`.
    - Engineer feature signals: lagged log returns (1d, 3d, 5d, 10d), rolling realized volatility, RSI/MFI momentum, volume ratios, and Kalman-filtered trend (`filterpy`, `scipy`).
    - Fit predictive models using installed ML/econometric libraries (`lightgbm`, `catboost`, `scikit-learn`, `statsmodels` AutoReg/ARIMA, `arch` GARCH).
+   - Fit and predict walk-forward only: for each step `i`, fit using only bars strictly before `i`
+     (an expanding or rolling window ending at `i-1`), then predict step `i`. Never fit once on
+     the full series and evaluate on the same data -- that leaks future information into
+     `forecasts[i]`/`calls[i]` and makes the M8 backtest meaningless even though it will still run.
    - Generate out-of-sample predicted return `forecasts[i]` and advance probability `calls[i] = P(return > 0)`.
    - Set `trade_side[i] = "buy"` if `calls[i] > 0.5`, else `"hold"`.
    - Set `position_notional[i] = 10000.0` when `trade_side[i] == "buy"`, else `0.0`.
@@ -22,9 +26,11 @@ Produce a price-direction forecast for {{ symbol }} (NSE) as of {{ as_of }}.
    over the next {{ horizon_days }} day by calling the AgentSignal tool:
    - `agent_name`: "price"
    - `direction`: "up" or "down"
-   - `probability`: 0.0 to 1.0
+   - `probability`: 0.50 to 1.0 (calibrated probability of your chosen direction occurring; e.g. 0.65 for 65% chance of UP if direction="up", or 0.65 for 65% chance of DOWN if direction="down")
    - `confidence`: 0.0 to 1.0
    - `horizon_days`: 1
-   - `evidence`: list of observations citing `source_capability: "market_data"` or `"macro"`.
+   - `evidence`: list of observations citing `source_capability: "market_data"` or `"macro"`. Every
+     `value` must be a number or fact you actually read from the saved JSON files -- never
+     estimate, round from memory, or invent a plausible-looking number.
 
 IMPORTANT: You MUST conclude your turn by calling the AgentSignal structured response tool.

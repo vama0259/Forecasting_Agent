@@ -33,7 +33,7 @@ export const ScenarioDetailSchema = z
   .object({
     primary_advocate: z.enum(['price', 'fii', 'dii', 'retail']),
     direction: z.enum(['up', 'down']),
-    probability: z.number().min(0).max(1),
+    probability: z.number().min(0.5, 'Scenario probability must be >= 0.50').max(1),
     confidence: z.number().min(0).max(1),
     primary_evidence_claims: z.array(z.string()).min(1),
     catastrophic_risks: z.array(z.string()).min(1),
@@ -103,7 +103,7 @@ export const DebateConsensusSchema = z
     symbol: z.string().min(1),
     as_of: z.string().datetime(),
     direction: z.enum(['up', 'down']),
-    consensus_probability: z.number().min(0).max(1),
+    consensus_probability: z.number().min(0.5, 'Consensus probability must be >= 0.50').max(1),
     consensus_confidence: z.number().min(0).max(1),
     dispersion: z.number().min(0),
     is_deadlocked: z.boolean(),

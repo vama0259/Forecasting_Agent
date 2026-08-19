@@ -1,10 +1,15 @@
 Produce a Foreign Institutional Investor (FII) intent forecast for {{ symbol }} (NSE) as of {{ as_of }}.
 
-1. Call the market tools:
+1. Call the available tools:
    a. fetch_flows(observed_on="{{ as_of }}", as_of="{{ as_of }}")
       Returns participant-wise derivative flow records: [{observed_on, participant, future_index_long, future_index_short, future_stock_long, future_stock_short, ...}, ...].
       Immediately save the exact result using write_file to /workspace/flows.json.
-   b. fetch_ohlcv(symbol="{{ symbol }}", market="NSE", start="{{ start_date }}", end="{{ as_of }}", as_of="{{ as_of }}")
+   b. search_news(query="{{ symbol }} FII foreign institutional investor cash flows derivatives {{ as_of }}")
+      Fetch recent financial reports on FII institutional buying/selling trends, net cash equity flows, and index futures positioning.
+      Search results carry no verified publish date -- treat them as general context only, never
+      as dated evidence for a specific historical {{ as_of }}, and never let them override numbers
+      already present in flows.json.
+   c. fetch_ohlcv(symbol="{{ symbol }}", market="NSE", start="{{ start_date }}", end="{{ as_of }}", as_of="{{ as_of }}")
       Immediately save the exact result using write_file to /workspace/bars.json.
 
 2. In Python (under /workspace/code/features/fii/), write an analysis script (e.g. `fii_features.py`) to fit quantitative flow & regime models:
@@ -12,14 +17,16 @@ Produce a Foreign Institutional Investor (FII) intent forecast for {{ symbol }} 
    - Calculate FII Index Futures Long/Short ratio: `fii_long / max(1, fii_short)` and rolling 5d/10d change in net positioning.
    - Fit ML/econometric classification or regression models (`scikit-learn`, `catboost`, `lightgbm`, `statsmodels`) combining market-wide FII positioning with {{ symbol }}'s relative strength and beta.
    - Evaluate institutional risk-on/risk-off regime shifts and cross-border flow momentum.
-   - If flows data is empty (e.g. holiday or weekend), handle gracefully with explicit_absence: true.
+   - If structured flows data is empty (e.g. holiday or weekend), use search findings and handle gracefully with explicit_absence: true only if no flow signals exist.
    - Run the script in the sandbox via execute to verify the indicators and model metrics.
 
 3. Separately, as your structured final response, give your overall FII intent forecast for {{ symbol }} over the next {{ horizon_days }} day:
    - `agent_name`: "fii"
    - `direction`: "up" or "down" (binary only)
-   - `probability`: 0.0 to 1.0 (calibrated probability that {{ symbol }} advances)
+   - `probability`: 0.50 to 1.0 (calibrated probability of your chosen direction occurring; e.g. 0.65 for 65% chance of UP if direction="up", or 0.65 for 65% chance of DOWN if direction="down")
    - `confidence`: 0.0 to 1.0
    - `horizon_days`: 1
-   - `evidence`: list of observations citing `source_capability: "flows"` or `"market_data"`.
+   - `evidence`: list of observations citing `source_capability: "flows"`, `"macro"`, or `"market_data"`.
+     Every `value` must be a number or fact you actually read from the saved JSON files -- never
+     estimate, round from memory, or invent a plausible-looking number.
    - `dissent`: optional counter-argument or institutional positioning nuance.

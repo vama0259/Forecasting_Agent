@@ -84,12 +84,24 @@ describe('AgentSignalSchema', () => {
     const invalidSignal = {
       agent_name: 'price',
       direction: 'down',
-      probability: 0.2,
+      probability: 0.7,
       confidence: 0.5,
       horizon_days: 1,
       evidence: [],
     };
     expect(() => AgentSignalSchema.parse(invalidSignal)).toThrow();
+  });
+
+  it('rejects probability < 0.50 for chosen direction', () => {
+    const invalidSignal = {
+      agent_name: 'price',
+      direction: 'down',
+      probability: 0.38,
+      confidence: 0.8,
+      horizon_days: 1,
+      evidence: [{ claim: 'test', source_capability: 'market_data', value: 1, explicit_absence: false }],
+    };
+    expect(() => AgentSignalSchema.parse(invalidSignal)).toThrow(/Probability for chosen direction must be >= 0\.50/);
   });
 });
 

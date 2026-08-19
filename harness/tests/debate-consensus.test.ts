@@ -350,7 +350,7 @@ describe('Deterministic Arithmetic Consensus Engine', () => {
       // Even if dispersion is below 0.18 (e.g. all clustered around 0.50), ambiguous consensus triggers deadlock
       const signals = createMockSignals({
         price: makeR3('price', 'up', 0.51, 0.7),
-        fii: makeR3('fii', 'up', 0.49, 0.7),
+        fii: makeR3('fii', 'down', 0.51, 0.7),
         dii: makeR3('dii', 'up', 0.5, 0.7),
         retail: makeR3('retail', 'up', 0.52, 0.7),
       });

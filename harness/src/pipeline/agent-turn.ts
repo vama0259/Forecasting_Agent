@@ -10,7 +10,7 @@ import type { TraceHandle } from '../tracing/langfuse.js';
 // catches anything that loop-count alone wouldn't (e.g. a stuck retry below the graph level) --
 // observed in testing: an invoke ran 300+ consecutive tool calls over 9+ minutes with neither bound in place.
 const AGENT_RECURSION_LIMIT = 100;
-const AGENT_INVOKE_TIMEOUT_MS = 300_000;
+const AGENT_INVOKE_TIMEOUT_MS = 600_000;
 
 export class AgentInvokeTimeoutError extends Error {}
 

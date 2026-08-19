@@ -233,7 +233,7 @@ describe('Debate Types and Wire Schemas', () => {
     const validBearCase = {
       primary_advocate: 'fii' as const,
       direction: 'down' as const,
-      probability: 0.3,
+      probability: 0.7,
       confidence: 0.65,
       primary_evidence_claims: ['Heavy index futures short positions'],
       catastrophic_risks: ['Short squeeze on unexpected policy easing'],
@@ -417,7 +417,7 @@ describe('Debate Types and Wire Schemas', () => {
           bear_case: {
             primary_advocate: 'fii' as const,
             direction: 'down' as const,
-            probability: 0.25,
+            probability: 0.75,
             confidence: 0.6,
             primary_evidence_claims: ['Global tech selloff'],
             catastrophic_risks: ['US recession'],

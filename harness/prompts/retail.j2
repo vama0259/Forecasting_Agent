@@ -9,7 +9,10 @@ Produce a Retail & Microstructure intent forecast for {{ symbol }} (NSE) as of {
    c. fetch_ohlcv(symbol="{{ symbol }}", market="NSE", start="{{ start_date }}", end="{{ as_of }}", as_of="{{ as_of }}")
       Immediately save to /workspace/bars.json.
    d. search_news(query="{{ symbol }} stock sentiment news {{ as_of }}")
-      Fetch recent financial news and sentiment context.
+      Fetch recent financial news and sentiment context. Search results carry no verified publish
+      date -- treat them as general context only, never as dated evidence for a specific historical
+      {{ as_of }}, and never let them override numbers already present in microstructure.json or
+      option_chain.json.
 
 2. In Python (under /workspace/code/features/retail/), write an analysis script (e.g. `retail_features.py`) to fit microstructure models:
    - Always load data dynamically with `json.load(open('/workspace/bars.json'))`, `json.load(open('/workspace/microstructure.json'))`, and `json.load(open('/workspace/option_chain.json'))`.
@@ -21,8 +24,10 @@ Produce a Retail & Microstructure intent forecast for {{ symbol }} (NSE) as of {
 3. Separately, as your structured final response, give your overall Retail & Microstructure forecast for {{ symbol }} over the next {{ horizon_days }} day:
    - `agent_name`: "retail"
    - `direction`: "up" or "down" (binary only)
-   - `probability`: 0.0 to 1.0
+   - `probability`: 0.50 to 1.0 (calibrated probability of your chosen direction occurring; e.g. 0.65 for 65% chance of UP if direction="up", or 0.65 for 65% chance of DOWN if direction="down")
    - `confidence`: 0.0 to 1.0
    - `horizon_days`: 1
    - `evidence`: list of observations citing `source_capability: "microstructure"`, `"sentiment"`, or `"market_data"`.
+     Every `value` must be a number or fact you actually read from the saved JSON files -- never
+     estimate, round from memory, or invent a plausible-looking number.
    - `dissent`: optional contrarian retail sentiment warning.
