@@ -12,7 +12,7 @@ const { mockInvoke, mockRunValidate, mockDisposeRun, mockSave } = vi.hoisted(() 
   mockSave: {
     saveForecast: vi.fn(),
     saveAgentSignal: vi.fn(),
-    saveEvalResult: vi.fn(),
+    saveEvalResults: vi.fn(),
   },
 }));
 
@@ -118,7 +118,7 @@ describe('runSingleAgentPipeline', () => {
     expect(mockRunValidate).toHaveBeenCalledTimes(1);
     expect(mockSave.saveForecast).toHaveBeenCalledTimes(1);
     expect(mockSave.saveAgentSignal).toHaveBeenCalledTimes(1);
-    expect(mockSave.saveEvalResult).toHaveBeenCalledTimes(1);
+    expect(mockSave.saveEvalResults).toHaveBeenCalledTimes(1);
     expect(mockDisposeRun).toHaveBeenCalledTimes(1);
     expect(result.evalResult.verdict).toBe('pass');
   });

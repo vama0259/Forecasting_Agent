@@ -585,27 +585,38 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
     round3: round3Signals,
   };
 
-  const consensus = calculateConsensus({
-    symbol,
-    asOf: asOfIso,
-    signalsByRound,
-    ...(historicalBrier !== undefined ? { historicalBrier } : {}),
-  });
+  let consensus: DebateConsensus;
+  try {
+    consensus = calculateConsensus({
+      symbol,
+      asOf: asOfIso,
+      signalsByRound,
+      ...(historicalBrier !== undefined ? { historicalBrier } : {}),
+    });
+  } catch (err) {
+    console.error(`[ERROR] calculateConsensus failed for ${symbol} asOf ${asOfIso}:`, err);
+    throw err;
+  }
 
   // Persist Round 4 consensus record
   const anyDegraded = Object.values(round3Signals).some((s) => s.degraded);
-  await maybeSaveRound({
-    forecastId,
-    symbol,
-    asOf: asOfIso,
-    roundNumber: 4,
-    agentName: 'consensus',
-    direction: consensus.direction,
-    probability: consensus.consensus_probability,
-    confidence: consensus.consensus_confidence,
-    degraded: anyDegraded,
-    payload: consensus as unknown as Record<string, unknown>,
-  });
+  try {
+    await maybeSaveRound({
+      forecastId,
+      symbol,
+      asOf: asOfIso,
+      roundNumber: 4,
+      agentName: 'consensus',
+      direction: consensus.direction,
+      probability: consensus.consensus_probability,
+      confidence: consensus.consensus_confidence,
+      degraded: anyDegraded,
+      payload: consensus as unknown as Record<string, unknown>,
+    });
+  } catch (saveErr) {
+    console.error(`[ERROR] Failed to persist Round 4 consensus (forecastId=${forecastId}, symbol=${symbol}):`, saveErr);
+    throw saveErr;
+  }
 
   return consensus;
 }

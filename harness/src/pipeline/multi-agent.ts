@@ -14,14 +14,13 @@ import { invokeAgentTurn } from './agent-turn.js';
 import { buildAgentBackend } from '../backend/composite.js';
 import { SandboxManager } from '../sandbox/manager.js';
 import { SandboxBackendAdapter } from '../sandbox/deepagents-adapter.js';
-import type { EvalResult as SandboxEvalResult } from '../sandbox/types.js';
-import { saveForecast, saveAgentSignal, saveEvalResult } from '../storage/repository.js';
+import { ValidationFailedError, type EvalResult as SandboxEvalResult } from '../sandbox/types.js';
+import { saveForecast, saveAgentSignal, saveEvalResults } from '../storage/repository.js';
 import { startForecastTrace, flushTraces, getLangchainCallbackHandler } from '../tracing/langfuse.js';
 import { buildSearchTool } from '../search/tool.js';
 import type { HarnessConfig } from '../config.js';
 import type { SearchCapability, SearchRunLifecycle } from '../search/types.js';
 import type { StructuredTool } from '@langchain/core/tools';
-import type { EvalResult as EvalResultRow } from '../storage/types.js';
 import type { TraceHandle } from '../tracing/langfuse.js';
 
 export interface ParticipantExecutionResult {
@@ -267,17 +266,23 @@ async function runMultiAgentForecast({
       }
       evalResult = validateResult.evalResult;
     } catch (valErr) {
+      const detail = valErr instanceof ValidationFailedError ? ` detail=${valErr.detail}` : '';
       console.warn(
-        `[WARN] Validate tier failed (${valErr instanceof Error ? valErr.message : String(valErr)}); using fallback evaluation`,
+        `[WARN] Validate tier failed (${valErr instanceof Error ? valErr.message : String(valErr)});${detail} using fallback evaluation`,
       );
+      // Same shape as the real INVALID short-circuit in evaluation/pipeline.py:27 --
+      // status:'DEGRADED' isn't a valid GateVerdict literal ('VALID'|'INVALID'), and flat
+      // mase/brier/sortino fields don't exist on the real EvalResult (they live in layer_means),
+      // so the old fallback object here was never schema-conformant on either axis.
       evalResult = {
-        mase: 1.5,
-        brier: 0.25,
-        sortino: 0.0,
         verdict: {
-          status: 'DEGRADED',
-          reason: valErr instanceof Error ? valErr.message : 'Validation failed',
+          status: 'INVALID',
+          reasons: [valErr instanceof Error ? valErr.message : 'Validation failed'],
+          folds: [],
+          skipped: [],
         },
+        layers: [],
+        layer_means: {},
       } as unknown as SandboxEvalResult;
       degradedAgents.push(anchorConfig.name);
     } finally {
@@ -298,7 +303,7 @@ async function runMultiAgentForecast({
         await saveAgentSignal(pool, { signal: sig, as_of: asOf, forecast_run_id: runId });
       }
     }
-    await saveEvalResult(pool, evalResult as unknown as EvalResultRow);
+    await saveEvalResults(pool, runId, evalResult);
 
     trace.update({
       metadata: { symbol, runId, degradedAgents },

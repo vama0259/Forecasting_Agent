@@ -96,6 +96,26 @@ export async function saveEvalResult(pool: Pool, result: EvalResult): Promise<vo
   );
 }
 
+// M8's layer_means is keyed "1"/"2"/"3" (JSON-serialized from Python's Literal[1,2,3] dict keys),
+// corresponding to MASE/Brier/Sortino per evaluation/pipeline.py's layer assignment.
+const LAYER_METRIC_NAMES: Record<string, string> = { '1': 'mase', '2': 'brier', '3': 'sortino' };
+
+// Takes the sandbox's real EvalResult ({verdict, layers, layer_means}, not a flat metric row) and
+// the forecast run it belongs to; inserts one evaluation_results row per available layer mean.
+// The whole-object cast previously used here (`saveEvalResult(pool, evalResult as unknown as
+// EvalResultRow)`) silently discarded every real MASE/Brier/Sortino value into a single blank
+// metric_name='' / metric_value=0 row, since EvalResult has no such flat fields.
+export async function saveEvalResults(pool: Pool, forecastRunId: string, evalResult: unknown): Promise<void> {
+  const layerMeans = (evalResult as { layer_means?: Record<string, { mean?: number }> } | undefined)?.layer_means;
+  if (!layerMeans) return;
+
+  for (const [layerId, name] of Object.entries(LAYER_METRIC_NAMES)) {
+    const mean = layerMeans[layerId]?.mean;
+    if (typeof mean !== 'number') continue;
+    await saveEvalResult(pool, { forecast_run_id: forecastRunId, metric_name: name, metric_value: mean });
+  }
+}
+
 export async function saveAgentSignal(pool: Pool, signal: AgentSignal): Promise<void> {
   const asOf = signal.as_of ?? signal.asOf;
   if (!asOf) {

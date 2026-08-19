@@ -14,7 +14,7 @@ const {
   mockDisposeRun,
   mockSaveForecast,
   mockSaveAgentSignal,
-  mockSaveEvalResult,
+  mockSaveEvalResults,
   mockCreateDeepAgent,
   mockTraceUpdate,
   mockTraceEnd,
@@ -28,7 +28,7 @@ const {
   mockDisposeRun: vi.fn().mockResolvedValue(undefined),
   mockSaveForecast: vi.fn().mockResolvedValue(undefined),
   mockSaveAgentSignal: vi.fn().mockResolvedValue(undefined),
-  mockSaveEvalResult: vi.fn().mockResolvedValue(undefined),
+  mockSaveEvalResults: vi.fn().mockResolvedValue(undefined),
   mockCreateDeepAgent: vi.fn(),
   mockTraceUpdate: vi.fn(),
   mockTraceEnd: vi.fn(),
@@ -83,7 +83,7 @@ vi.mock('../src/sandbox/deepagents-adapter.js', () => ({
 vi.mock('../src/storage/repository.js', () => ({
   saveForecast: mockSaveForecast,
   saveAgentSignal: mockSaveAgentSignal,
-  saveEvalResult: mockSaveEvalResult,
+  saveEvalResults: mockSaveEvalResults,
 }));
 
 vi.mock('../src/tracing/langfuse.js', () => ({
@@ -351,7 +351,7 @@ describe('multi-agent pipeline', () => {
         }),
       );
 
-      expect(mockSaveEvalResult).toHaveBeenCalledTimes(1);
+      expect(mockSaveEvalResults).toHaveBeenCalledTimes(1);
 
       // Check search lifecycle
       expect(searchMock.beginRun).toHaveBeenCalledTimes(1);

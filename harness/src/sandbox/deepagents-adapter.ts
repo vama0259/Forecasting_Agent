@@ -55,17 +55,14 @@ export class SandboxBackendAdapter extends BaseSandbox {
     };
   }
 
-  // Takes [path, bytes] tuples; base64-round-trips each through the explore-tier shell
-  // (binary-safe, no Docker archive API needed) and returns per-file upload results.
+  // Takes [path, bytes] tuples; streams each over stdin into the warm container (binary-safe,
+  // no Docker archive API needed, no argv-length limit) and returns per-file upload results.
   async uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
     const results: FileUploadResponse[] = [];
     for (const [path, bytes] of files) {
       const start = Date.now();
       console.error(`[${this.id}] adapter.uploadFiles: start path=${path} bytes=${bytes.length}`);
-      const base64 = Buffer.from(bytes).toString('base64');
-      const dir = shellQuote(path.slice(0, path.lastIndexOf('/')) || '/');
-      const command = `mkdir -p ${dir} && printf '%s' '${base64}' | base64 -d > ${shellQuote(path)}`;
-      const result = await this.#manager.runExplore({ runId: this.id, tier: 'explore', code: command });
+      const result = await this.#manager.writeFile(this.id, path, bytes);
       console.error(
         `[${this.id}] adapter.uploadFiles: done in ${Date.now() - start}ms path=${path} exitCode=${result.exitCode}`,
       );

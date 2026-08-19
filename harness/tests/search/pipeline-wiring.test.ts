@@ -14,7 +14,7 @@ const { mockInvoke, mockRunValidate, mockDisposeRun, mockSave, mockCreateDeepAge
     mockSave: {
       saveForecast: vi.fn(),
       saveAgentSignal: vi.fn(),
-      saveEvalResult: vi.fn(),
+      saveEvalResults: vi.fn(),
       saveSearchObservations: vi.fn(),
     },
     mockCreateDeepAgent: vi.fn(),

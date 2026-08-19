@@ -14,6 +14,14 @@ function makeMockManager(): SandboxManager {
       durationMs: 5,
     }),
     disposeRun: vi.fn().mockResolvedValue(undefined),
+    writeFile: vi.fn().mockResolvedValue({
+      stdout: '',
+      stderr: '',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      exitCode: 0,
+      durationMs: 5,
+    }),
   } as unknown as SandboxManager;
 }
 
@@ -54,23 +62,20 @@ describe('SandboxBackendAdapter', () => {
     expect(result).toEqual({ output: 'outerr', exitCode: 1, truncated: true });
   });
 
-  it('uploadFiles base64-round-trips content through runExplore and reports success', async () => {
+  it('uploadFiles streams content through manager.writeFile and reports success', async () => {
     const manager = makeMockManager();
     const adapter = new SandboxBackendAdapter(manager, 'run-123');
+    const bytes = new TextEncoder().encode('hi');
 
-    const result = await adapter.uploadFiles([['/workspace/a.txt', new TextEncoder().encode('hi')]]);
+    const result = await adapter.uploadFiles([['/workspace/a.txt', bytes]]);
 
-    expect(manager.runExplore).toHaveBeenCalledWith({
-      runId: 'run-123',
-      tier: 'explore',
-      code: expect.stringContaining("base64 -d > '/workspace/a.txt'"),
-    });
+    expect(manager.writeFile).toHaveBeenCalledWith('run-123', '/workspace/a.txt', bytes);
     expect(result).toEqual([{ path: '/workspace/a.txt', error: null }]);
   });
 
   it('uploadFiles reports invalid_path on a non-zero exit code', async () => {
     const manager = makeMockManager();
-    (manager.runExplore as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (manager.writeFile as ReturnType<typeof vi.fn>).mockResolvedValue({
       stdout: '',
       stderr: 'no such directory',
       stdoutTruncated: false,

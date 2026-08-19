@@ -102,8 +102,8 @@ try {
 
   const asOf = new Date().toISOString();
   const runId = `debate-${symbol}-${Date.now()}`;
-  const trace = startForecastTrace(symbol, asOf, runId);
-  const langfuseHandler = getLangchainCallbackHandler(trace);
+  const trace = startForecastTrace(config, runId, { symbol, asOf });
+  const langfuseHandler = getLangchainCallbackHandler(config);
 
   const rawMarketTools = await marketMcpClient.getTools();
   const marketTools = rawMarketTools.map((t) => {
@@ -159,7 +159,7 @@ try {
   );
   console.error(`================================================================`);
 
-  await flushTraces();
+  await flushTraces(config);
 } finally {
   redisClient.disconnect();
   await searchMcpClient.close();

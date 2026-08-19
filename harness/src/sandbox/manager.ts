@@ -28,7 +28,7 @@ type ResolvedSandboxConfig = {
 };
 
 const DEFAULTS: ResolvedSandboxConfig = {
-  concurrency: 2,
+  concurrency: 4,
   timeoutMs: 120_000,
   stdioBufferBytes: 50 * 1024,
   idleReaperMs: 10 * 60_000,
@@ -88,6 +88,23 @@ export class SandboxManager {
       entry.lastActivityMs = Date.now();
       return this.semaphore.runExclusive(() =>
         this.execWithTimeout(entry.container, req.code ?? '', req.runId, /* isExplore */ true),
+      );
+    });
+  }
+
+  // Takes a runId, target path, and raw bytes; streams them into the warm container over
+  // stdin (not embedded in the exec argv) so large files don't hit the kernel's ARG_MAX on
+  // execve -- a single-quoted base64 literal in `Cmd` failed with exitCode=255 above ~600KB.
+  async writeFile(runId: string, path: string, bytes: Uint8Array): Promise<ExecutionResult> {
+    const mutex = this.mutexFor(runId);
+    return mutex.runExclusive(async () => {
+      const entry = await this.getOrCreateWarmContainer(runId, undefined);
+      entry.lastActivityMs = Date.now();
+      const quoted = `'${path.replaceAll("'", `'\\''`)}'`;
+      const dir = `'${(path.slice(0, path.lastIndexOf('/')) || '/').replaceAll("'", `'\\''`)}'`;
+      const command = `mkdir -p ${dir} && cat > ${quoted}`;
+      return this.semaphore.runExclusive(() =>
+        this.execWithTimeout(entry.container, command, runId, /* isExplore */ true, Buffer.from(bytes)),
       );
     });
   }
@@ -253,6 +270,7 @@ export class SandboxManager {
     command: string,
     runId: string,
     isExplore: boolean,
+    stdinData?: Buffer,
   ): Promise<ExecutionResult> {
     const stdout = new RingBuffer(this.config.stdioBufferBytes);
     const stderr = new RingBuffer(this.config.stdioBufferBytes);
@@ -261,11 +279,12 @@ export class SandboxManager {
     const doExec = async (): Promise<Dockerode.Exec> => {
       const runExec = await container.exec({
         Cmd: ['sh', '-c', command],
+        AttachStdin: stdinData !== undefined,
         AttachStdout: true,
         AttachStderr: true,
       });
 
-      const runStream = await runExec.start({ hijack: true, stdin: false });
+      const runStream = await runExec.start({ hijack: true, stdin: stdinData !== undefined });
       if (runStream) {
         // Docker exec streams multiplex stdout/stderr into one stream with an 8-byte
         // frame header per chunk unless Tty is set -- demux, don't read raw chunks,
@@ -277,6 +296,20 @@ export class SandboxManager {
             { write: (c: Buffer) => stderr.write(c) },
           );
           runStream.on('end', () => resolve());
+          // A stdin write racing a container-side process that already exited (e.g. the
+          // command's own `mkdir` failing) emits an unhandled 'error' (EPIPE) that otherwise
+          // crashes the whole Node process -- observed for real, not hypothetical. The
+          // command's real exit code (captured below via runExec.inspect()) already reports
+          // the failure, so here we only need to stop hanging, not treat this as fatal.
+          runStream.on('error', (err: Error) => {
+            stderr.write(Buffer.from(`[stream error] ${err.message}\n`));
+            resolve();
+          });
+          // Stream large payloads over stdin instead of embedding them in Cmd's argv,
+          // which is subject to the kernel's ARG_MAX on execve (observed failing above ~600KB).
+          if (stdinData !== undefined) {
+            runStream.end(stdinData);
+          }
         });
       }
       return runExec;

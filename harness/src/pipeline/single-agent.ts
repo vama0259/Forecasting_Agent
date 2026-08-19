@@ -12,11 +12,11 @@ import { SandboxBackendAdapter } from '../sandbox/deepagents-adapter.js';
 import { SandboxManager } from '../sandbox/manager.js';
 import { ValidationFailedError } from '../sandbox/types.js';
 import type { EvalResult as SandboxEvalResult } from '../sandbox/types.js';
-import { saveForecast, saveAgentSignal, saveEvalResult } from '../storage/repository.js';
+import { saveForecast, saveAgentSignal, saveEvalResults } from '../storage/repository.js';
 import { startForecastTrace, flushTraces, getLangchainCallbackHandler } from '../tracing/langfuse.js';
 import { invokeAgentTurn } from './agent-turn.js';
 import type { HarnessConfig } from '../config.js';
-import type { AgentSignal as AgentSignalRow, EvalResult as EvalResultRow } from '../storage/types.js';
+import type { AgentSignal as AgentSignalRow } from '../storage/types.js';
 import type { StructuredTool } from '@langchain/core/tools';
 import { buildSearchTool } from '../search/tool.js';
 import type { SearchCapability, SearchRunLifecycle } from '../search/types.js';
@@ -176,7 +176,7 @@ async function runForecast({
       degraded: searchDegraded,
     });
     await saveAgentSignal(pool, forecastRow);
-    await saveEvalResult(pool, evalResult as unknown as EvalResultRow);
+    await saveEvalResults(pool, runId, evalResult);
     logStage(runId, 'storage: forecast + agent_signal + eval_result persisted');
 
     trace.update({ metadata: { symbol, runId }, output: { signal, verdict: evalResult.verdict } });
