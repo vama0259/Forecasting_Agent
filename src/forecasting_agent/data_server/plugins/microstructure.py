@@ -2,8 +2,11 @@
 
 import csv
 import io
+import logging
 from datetime import date
 
+from forecasting_agent.archive.downloaders.nse_bulk_block_deals import NseBulkBlockDealsDownloader
+from forecasting_agent.archive.downloaders.nse_delivery_position import NseDeliveryPositionDownloader
 from forecasting_agent.archive.store import ObservationStore
 from forecasting_agent.data_server.connectors import ArchiveDerivedPlugin
 from forecasting_agent.data_server.contracts import (
@@ -13,33 +16,41 @@ from forecasting_agent.data_server.contracts import (
     MicrostructureResponse,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class MicrostructurePlugin(ArchiveDerivedPlugin):
     # Plugin parsing delivery and deal microstructure archives into typed response models.
 
+    def __init__(
+        self,
+        delivery_downloader: NseDeliveryPositionDownloader | None = None,
+        deals_downloader: NseBulkBlockDealsDownloader | None = None,
+    ) -> None:
+        self._delivery_downloader = delivery_downloader
+        self._deals_downloader = deals_downloader
+
     @staticmethod
     def _parse_delivery(content: bytes, observed_on: date) -> list[DeliveryRecord]:
         text = content.decode("utf-8", errors="replace")
-        lines = text.splitlines()
-        header_idx = -1
-        for i, line in enumerate(lines):
-            if "Record Type" in line and "Name of Security" in line:
-                header_idx = i
-                break
-        if header_idx == -1:
-            return []
-
-        csv_content = "\n".join(lines[header_idx:])
-        reader = csv.DictReader(io.StringIO(csv_content))
         records: list[DeliveryRecord] = []
-        for row in reader:
-            symbol = row.get("Name of Security", "").strip()
-            series = row.get("Series", "").strip()
+        reader = csv.reader(io.StringIO(text))
+        for parts in reader:
+            if not parts or len(parts) < 7:
+                continue
+            record_type = parts[0].strip()
+            if record_type != "20":
+                continue
+            symbol = parts[2].strip()
+            series = parts[3].strip()
             if not symbol or not series:
                 continue
-            qty = int(row.get("Quantity Traded", 0))
-            deliv_qty = int(row.get("Deliverable Quantity(gross across client level)", 0))
-            deliv_pct = float(row.get("% of Deliverable Quantity to Traded Quantity", 0.0))
+            try:
+                qty = int(parts[4].strip())
+                deliv_qty = int(parts[5].strip())
+                deliv_pct = float(parts[6].strip())
+            except (ValueError, IndexError):
+                continue
             records.append(
                 DeliveryRecord(
                     observed_on=observed_on,
@@ -86,8 +97,31 @@ class MicrostructurePlugin(ArchiveDerivedPlugin):
         # Fetches and parses delivery and bulk/block deal records for given observed_on date.
         store = ObservationStore()
         delivery_content = store.read(source="delivery_position", observed_on=observed_on)
+        if delivery_content is None:
+            try:
+                dl = self._delivery_downloader or NseDeliveryPositionDownloader()
+                delivery_content = dl.fetch_raw(observed_on)
+                store.write(source="delivery_position", observed_on=observed_on, content=delivery_content)
+            except Exception as exc:
+                logger.debug("On-demand delivery position fetch failed for %s: %s", observed_on, exc)
+
         bulk_content = store.read(source="bulk_deals", observed_on=observed_on)
+        if bulk_content is None and observed_on == date.today():  # noqa: DTZ011
+            try:
+                dl = self._deals_downloader or NseBulkBlockDealsDownloader()
+                bulk_content = dl.fetch_bulk(observed_on)
+                store.write(source="bulk_deals", observed_on=observed_on, content=bulk_content)
+            except Exception as exc:
+                logger.debug("On-demand bulk deals fetch failed for %s: %s", observed_on, exc)
+
         block_content = store.read(source="block_deals", observed_on=observed_on)
+        if block_content is None and observed_on == date.today():  # noqa: DTZ011
+            try:
+                dl = self._deals_downloader or NseBulkBlockDealsDownloader()
+                block_content = dl.fetch_block(observed_on)
+                store.write(source="block_deals", observed_on=observed_on, content=block_content)
+            except Exception as exc:
+                logger.debug("On-demand block deals fetch failed for %s: %s", observed_on, exc)
 
         missing: list[str] = []
         if delivery_content is None:
