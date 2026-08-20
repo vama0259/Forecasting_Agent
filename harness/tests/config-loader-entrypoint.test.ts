@@ -8,6 +8,7 @@ const env = {
   ANYSEARCH_API_KEY: 'k',
   REDIS_URL: 'redis://127.0.0.1:6379',
   REPO_ROOT: '/repo',
+  LLM_PROVIDER: 'deepseek',
   LLM_MODEL: 'm',
   LLM_CODE_MODEL: 'm-pro',
   LLM_API_KEY: 'k',

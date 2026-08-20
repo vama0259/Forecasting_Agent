@@ -1,5 +1,5 @@
 llm:
-  provider: deepseek
+  provider: ${LLM_PROVIDER}
   model: ${LLM_MODEL}
   code_model: ${LLM_CODE_MODEL}
   api_key: ${LLM_API_KEY}
