@@ -49,6 +49,17 @@ search:
     - livemint.com
     - bseindia.com
     - nseindia.com
+    - business-standard.com
+    - financialexpress.com
+    - cnbctv18.com
+    - ndtvprofit.com
+    - thehindubusinessline.com
+    - reuters.com
+    - bloomberg.com
+    - mint.com
+    - x.com
+    - twitter.com
+    - reddit.com
 
 sandbox:
   # 120s was sized for the old 120-day (~85 bar) window. At the 750-day (~536 bar) window the

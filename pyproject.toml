@@ -19,6 +19,8 @@ dependencies = [
     "logzero",
     "websocket-client",
     "dspy>=3.3.0",
+    "torch>=2.2.0",
+    "transformers>=4.40.0",
 ]
 
 [dependency-groups]
