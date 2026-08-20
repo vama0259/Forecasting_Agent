@@ -1,9 +1,21 @@
 # Unit tests for AngelOneInstrumentMaster.
-from datetime import date
+import json
+import os
+from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolate_instruments_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Points default cache directory to an isolated temp path for each unit test.
+    from forecasting_agent.data_server.plugins.angelone_instruments import AngelOneInstrumentMaster
+
+    monkeypatch.setattr(AngelOneInstrumentMaster, "DEFAULT_CACHE_DIR", tmp_path / "instruments")
 
 
 def _fake_response(rows: list[dict[str, Any]]) -> MagicMock:
@@ -136,3 +148,83 @@ def test_list_option_chain_returns_empty_for_unknown_underlying(mock_get: MagicM
     rows = master.list_option_chain("NOTREAL")
 
     assert rows == []
+
+
+@patch("forecasting_agent.data_server.plugins.angelone_instruments.httpx.get")
+def test_load_uses_valid_disk_cache_without_network_call(mock_get: MagicMock, tmp_path: Path) -> None:
+    from forecasting_agent.data_server.plugins.angelone_instruments import AngelOneInstrumentMaster
+
+    cache_file = tmp_path / "instruments" / "OpenAPIScripMaster.json"
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(
+        json.dumps([{"token": "999", "symbol": "DISK_HIT", "exch_seg": "NSE", "name": "HIT"}]),
+        encoding="utf-8",
+    )
+
+    master = AngelOneInstrumentMaster(cache_dir=tmp_path / "instruments")
+    token = master.resolve("DISK_HIT", "NSE")
+
+    assert token == "999"
+    mock_get.assert_not_called()
+
+
+@patch("forecasting_agent.data_server.plugins.angelone_instruments.httpx.get")
+def test_load_refetches_when_disk_cache_is_stale(mock_get: MagicMock, tmp_path: Path) -> None:
+    from forecasting_agent.data_server.plugins.angelone_instruments import AngelOneInstrumentMaster
+
+    cache_file = tmp_path / "instruments" / "OpenAPIScripMaster.json"
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(
+        json.dumps([{"token": "old_tok", "symbol": "OLD", "exch_seg": "NSE", "name": "OLD"}]),
+        encoding="utf-8",
+    )
+    yesterday = date.today() - timedelta(days=1)  # noqa: DTZ011
+    yesterday_ts = datetime.combine(yesterday, datetime.min.time()).timestamp()
+    os.utime(cache_file, (yesterday_ts, yesterday_ts))
+
+    mock_get.return_value = _fake_response([{"token": "new_tok", "symbol": "NEW", "exch_seg": "NSE", "name": "NEW"}])
+
+    master = AngelOneInstrumentMaster(cache_dir=tmp_path / "instruments")
+    token = master.resolve("NEW", "NSE")
+
+    assert token == "new_tok"
+    assert mock_get.call_count == 1
+
+
+@patch("forecasting_agent.data_server.plugins.angelone_instruments.httpx.get")
+def test_load_falls_back_to_stale_cache_when_live_fetch_fails(mock_get: MagicMock, tmp_path: Path) -> None:
+    from forecasting_agent.data_server.plugins.angelone_instruments import AngelOneInstrumentMaster
+
+    cache_file = tmp_path / "instruments" / "OpenAPIScripMaster.json"
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(
+        json.dumps([{"token": "fallback_tok", "symbol": "FALLBACK", "exch_seg": "NSE", "name": "FB"}]),
+        encoding="utf-8",
+    )
+    yesterday = date.today() - timedelta(days=2)  # noqa: DTZ011
+    yesterday_ts = datetime.combine(yesterday, datetime.min.time()).timestamp()
+    os.utime(cache_file, (yesterday_ts, yesterday_ts))
+
+    mock_get.side_effect = httpx.ConnectError("Network unreachable")
+
+    master = AngelOneInstrumentMaster(cache_dir=tmp_path / "instruments")
+    token = master.resolve("FALLBACK", "NSE")
+
+    assert token == "fallback_tok"
+
+
+@patch("forecasting_agent.data_server.plugins.angelone_instruments.httpx.get")
+def test_load_recovers_from_corrupted_disk_cache(mock_get: MagicMock, tmp_path: Path) -> None:
+    from forecasting_agent.data_server.plugins.angelone_instruments import AngelOneInstrumentMaster
+
+    cache_file = tmp_path / "instruments" / "OpenAPIScripMaster.json"
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_bytes(b"not valid json {{{")
+
+    mock_get.return_value = _fake_response([{"token": "rec_tok", "symbol": "REC", "exch_seg": "NSE", "name": "REC"}])
+
+    master = AngelOneInstrumentMaster(cache_dir=tmp_path / "instruments")
+    token = master.resolve("REC", "NSE")
+
+    assert token == "rec_tok"
+    assert mock_get.call_count == 1

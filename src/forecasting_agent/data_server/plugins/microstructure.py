@@ -41,10 +41,15 @@ class MicrostructurePlugin(ArchiveDerivedPlugin):
             record_type = parts[0].strip()
             if record_type != "20":
                 continue
-            symbol = parts[2].strip()
+            raw_symbol = parts[2].strip()
             series = parts[3].strip()
-            if not symbol or not series:
+            if not raw_symbol or not series:
                 continue
+            # NSE's MTO file carries the bare ticker (e.g. "TCS"); every other plugin in this
+            # codebase (bars, option chain) keys on the ".NS"-suffixed convention, and callers
+            # (retail agent prompts/generated code) filter delivery records against that same
+            # convention -- an un-suffixed symbol here silently fails every such filter.
+            symbol = f"{raw_symbol}.NS"
             try:
                 qty = int(parts[4].strip())
                 deliv_qty = int(parts[5].strip())
@@ -72,9 +77,12 @@ class MicrostructurePlugin(ArchiveDerivedPlugin):
             date_val = row.get("Date", "").strip()
             if date_val == "NO RECORDS" or not date_val:
                 continue
-            symbol = row.get("Symbol", "").strip()
-            if not symbol:
+            raw_symbol = row.get("Symbol", "").strip()
+            if not raw_symbol:
                 continue
+            # Same ".NS" normalization as delivery records above -- these bulk/block deal files
+            # are NSE-only and carry bare tickers too.
+            symbol = f"{raw_symbol}.NS"
             client_name = row.get("Client Name", "").strip()
             buy_sell = row.get("Buy/Sell", "").strip().upper()
             if buy_sell not in ("BUY", "SELL"):
@@ -97,10 +105,10 @@ class MicrostructurePlugin(ArchiveDerivedPlugin):
         # Fetches and parses delivery and bulk/block deal records for given observed_on date.
         store = ObservationStore()
         delivery_content = store.read(source="delivery_position", observed_on=observed_on)
-        if delivery_content is None:
+        if delivery_content is None and observed_on == date.today():  # noqa: DTZ011
             try:
-                dl = self._delivery_downloader or NseDeliveryPositionDownloader()
-                delivery_content = dl.fetch_raw(observed_on)
+                dl_deliv = self._delivery_downloader or NseDeliveryPositionDownloader()
+                delivery_content = dl_deliv.fetch_raw(observed_on)
                 store.write(source="delivery_position", observed_on=observed_on, content=delivery_content)
             except Exception as exc:
                 logger.debug("On-demand delivery position fetch failed for %s: %s", observed_on, exc)
@@ -108,8 +116,8 @@ class MicrostructurePlugin(ArchiveDerivedPlugin):
         bulk_content = store.read(source="bulk_deals", observed_on=observed_on)
         if bulk_content is None and observed_on == date.today():  # noqa: DTZ011
             try:
-                dl = self._deals_downloader or NseBulkBlockDealsDownloader()
-                bulk_content = dl.fetch_bulk(observed_on)
+                dl_bulk = self._deals_downloader or NseBulkBlockDealsDownloader()
+                bulk_content = dl_bulk.fetch_bulk(observed_on)
                 store.write(source="bulk_deals", observed_on=observed_on, content=bulk_content)
             except Exception as exc:
                 logger.debug("On-demand bulk deals fetch failed for %s: %s", observed_on, exc)
@@ -117,8 +125,8 @@ class MicrostructurePlugin(ArchiveDerivedPlugin):
         block_content = store.read(source="block_deals", observed_on=observed_on)
         if block_content is None and observed_on == date.today():  # noqa: DTZ011
             try:
-                dl = self._deals_downloader or NseBulkBlockDealsDownloader()
-                block_content = dl.fetch_block(observed_on)
+                dl_block = self._deals_downloader or NseBulkBlockDealsDownloader()
+                block_content = dl_block.fetch_block(observed_on)
                 store.write(source="block_deals", observed_on=observed_on, content=block_content)
             except Exception as exc:
                 logger.debug("On-demand block deals fetch failed for %s: %s", observed_on, exc)

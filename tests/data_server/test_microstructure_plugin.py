@@ -36,13 +36,15 @@ def test_fetch_parses_all_three_sources_when_present(mock_store_cls):
     resp = MicrostructurePlugin().fetch(date(2026, 8, 14))
 
     assert len(resp.delivery) == 2
-    tcs = next(r for r in resp.delivery if r.symbol == "TCS")
+    # Symbols carry the ".NS" suffix -- the convention every other plugin (bars, option chain)
+    # and every downstream filter (retail agent prompts/generated code) already uses.
+    tcs = next(r for r in resp.delivery if r.symbol == "TCS.NS")
     assert tcs.series == "EQ"
     assert tcs.quantity_traded == 2232160
     assert tcs.deliverable_quantity == 1141107
     assert tcs.delivery_pct == 51.12
     assert len(resp.bulk_deals) == 1
-    assert resp.bulk_deals[0].symbol == "AGIIL"
+    assert resp.bulk_deals[0].symbol == "AGIIL.NS"
     assert resp.block_deals == []
     assert resp.coverage_note is None
 

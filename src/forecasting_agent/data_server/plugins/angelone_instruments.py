@@ -1,5 +1,10 @@
 # Angel One instrument master table resolver for symbol token mapping and option chain enumeration.
+import json
+import logging
+import os
+import time
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -7,6 +12,8 @@ import httpx
 INSTRUMENT_MASTER_URL = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json"
 
 _OPTION_INSTRUMENT_TYPES = ("OPTSTK", "OPTIDX")
+
+logger = logging.getLogger(__name__)
 
 
 class SymbolNotFoundError(Exception):
@@ -17,20 +24,78 @@ class SymbolNotFoundError(Exception):
 class AngelOneInstrumentMaster:
     # Resolves trading symbols to Angel One instrument tokens via cached scrip master file.
 
-    def __init__(self) -> None:
-        # Initializes the instrument master resolver with an empty cache.
+    DEFAULT_CACHE_DIR = Path("data/cache/instruments")
+
+    def __init__(self, cache_dir: Path | str | None = None) -> None:
+        # Initializes the instrument master resolver with an empty memory cache and disk cache path.
         self._instruments: list[dict[str, Any]] | None = None
+        self._cache_dir = Path(cache_dir) if cache_dir is not None else self.DEFAULT_CACHE_DIR
+
+    def _cache_file_path(self) -> Path:
+        # Returns the full path to the cached scrip master JSON file.
+        return self._cache_dir / "OpenAPIScripMaster.json"
+
+    def _is_cache_valid(self, cache_file: Path) -> bool:
+        # Returns True if cache file exists, is non-empty, and was modified on the current calendar date.
+        if not cache_file.exists() or not cache_file.is_file():
+            return False
+        try:
+            stat = cache_file.stat()
+            if stat.st_size == 0:
+                return False
+            mtime_date = date.fromtimestamp(stat.st_mtime)  # noqa: DTZ012
+            return mtime_date == date.today()  # noqa: DTZ011 -- local day matches Angel One daily publish cycle
+        except OSError:
+            return False
+
+    def _load_from_disk(self, cache_file: Path) -> list[dict[str, Any]] | None:
+        # Reads and parses scrip master list from disk cache file, returning None on error.
+        try:
+            with open(cache_file, encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, list) else None
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.debug("Failed to read instrument cache from %s: %s", cache_file, exc)
+            return None
+
+    def _write_to_disk(self, cache_file: Path, data: list[dict[str, Any]]) -> None:
+        # Writes scrip master data atomically to disk cache file using a temporary file.
+        try:
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            tmp_file = cache_file.with_name(f"{cache_file.name}.{os.getpid()}.{time.time_ns()}.tmp")
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            tmp_file.replace(cache_file)
+        except OSError as exc:
+            logger.debug("Failed to write instrument cache to %s: %s", cache_file, exc)
 
     def _load(self) -> list[dict[str, Any]]:
-        # Takes nothing; returns the cached scrip master rows, fetching once on first call.
-        instruments = self._instruments
-        if instruments is None:
+        # Returns cached scrip master rows, checking in-memory, disk cache, then network fetch.
+        if self._instruments is not None:
+            return self._instruments
+
+        cache_file = self._cache_file_path()
+        if self._is_cache_valid(cache_file):
+            disk_data = self._load_from_disk(cache_file)
+            if disk_data is not None:
+                self._instruments = disk_data
+                return disk_data
+
+        try:
             resp = httpx.get(INSTRUMENT_MASTER_URL, timeout=30)
             resp.raise_for_status()
             data = resp.json()
             instruments = data if isinstance(data, list) else []
             self._instruments = instruments
-        return instruments
+            self._write_to_disk(cache_file, instruments)
+            return instruments
+        except Exception as exc:
+            disk_data = self._load_from_disk(cache_file)
+            if disk_data is not None:
+                logger.warning("Live instrument master fetch failed (%s); using stale disk cache", exc)
+                self._instruments = disk_data
+                return disk_data
+            raise
 
     def resolve(self, tradingsymbol: str, exchange: str) -> str:
         # Resolves trading symbol and exchange to instrument token string, raising SymbolNotFoundError if missing.
