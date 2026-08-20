@@ -4,7 +4,7 @@ import { createDeepAgent } from 'deepagents';
 import type { StructuredTool } from '@langchain/core/tools';
 import { toolStrategy } from 'langchain';
 import { z } from 'zod';
-import { buildDeepSeekModel, deepSeekAutoToolChoiceMiddleware } from '../llm/deepseek.js';
+import { buildModel } from '../llm/index.js';
 import type { HarnessConfig } from '../config.js';
 import type { SandboxBackendAdapter } from '../sandbox/deepagents-adapter.js';
 
@@ -30,11 +30,12 @@ export interface BuildPriceAnchorAgentParams {
 
 // Takes the LLM config, MCP tools, and a sandbox backend; returns a configured deepagents instance.
 export function buildPriceAnchorAgent({ llmConfig, tools, backend }: BuildPriceAnchorAgentParams) {
+  const { model, middlewares: providerMiddlewares } = buildModel(llmConfig);
   return createDeepAgent({
-    model: buildDeepSeekModel(llmConfig),
+    model,
     tools,
     backend,
     responseFormat: toolStrategy(PriceAnchorSignalSchema),
-    middleware: [deepSeekAutoToolChoiceMiddleware],
+    middleware: [...providerMiddlewares],
   });
 }

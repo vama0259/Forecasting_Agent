@@ -1,7 +1,7 @@
 import { createDeepAgent } from 'deepagents';
 import { toolStrategy } from 'langchain';
 import type { StructuredTool } from '@langchain/core/tools';
-import { buildDeepSeekModel, deepSeekAutoToolChoiceMiddleware } from '../llm/deepseek.js';
+import { buildModel } from '../llm/index.js';
 import { buildCostBudgetMiddleware } from '../middleware/cost-budget.js';
 import { buildEvidenceValidationMiddleware } from '../middleware/evidence-validation.js';
 import { buildAuditMiddleware } from '../middleware/audit.js';
@@ -31,14 +31,15 @@ export function buildParticipantAgent({
   schema,
 }: BuildParticipantAgentParams) {
   const filteredTools = tools.filter((t) => config.tools.includes(t.name));
+  const { model, middlewares: providerMiddlewares } = buildModel(llmConfig);
 
   return createDeepAgent({
-    model: buildDeepSeekModel(llmConfig),
+    model,
     tools: filteredTools,
     backend,
     responseFormat: toolStrategy(schema ?? AgentSignalSchema),
     middleware: [
-      deepSeekAutoToolChoiceMiddleware,
+      ...providerMiddlewares,
       buildCostBudgetMiddleware(config.maxTokenBudget),
       buildEvidenceValidationMiddleware(config.name, config.allowedCapabilities, config.primaryCapability),
       buildAuditMiddleware(config.name, trace),

@@ -36,6 +36,8 @@ export const HarnessConfigSchema = z.object({
     // round 4 (zero-LLM consensus) always use `model` -- no evidence they're the bottleneck.
     code_model: z.string().min(1).optional(),
     api_key: z.string().min(1),
+    base_url: z.string().url().optional(),
+    temperature: z.number().min(0).max(2).optional(),
   }),
   mcp_servers: z.record(z.string(), McpServerSchema).default({}),
   capabilities: CapabilitiesSchema,
