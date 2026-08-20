@@ -26,7 +26,20 @@ export class SkillRegistry {
 
   // Discovers and parses skill packages filtered by point-in-time as_of date.
   async discover(asOf: string, skillsDir?: string): Promise<SkillPackage[]> {
-    const dir = skillsDir ? resolve(skillsDir) : resolve(process.cwd(), 'skills');
+    let dir = skillsDir ? resolve(skillsDir) : resolve(process.cwd(), 'skills');
+    if (!skillsDir) {
+      try {
+        await access(dir);
+      } catch {
+        const parentDir = resolve(process.cwd(), '..', 'skills');
+        try {
+          await access(parentDir);
+          dir = parentDir;
+        } catch {
+          // fallback to original dir
+        }
+      }
+    }
     const cacheKey = `${dir}::${asOf}`;
     const cached = this.cache.get(cacheKey);
     if (cached) {
