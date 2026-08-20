@@ -7,7 +7,7 @@ import { MultiServerMCPClient } from 'langchain-mcp-adapters';
 import { PostgresStore } from '../storage/postgres-store.js';
 import type { BaseStore } from '@langchain/langgraph-checkpoint';
 import { AGENT_CONFIGS } from '../agents/types.js';
-import { buildParticipantAgent } from '../agents/factory.js';
+import { buildParticipantAgent, wrapSentimentTool } from '../agents/factory.js';
 import { AgentSignalSchema, type AgentSignal } from '../agents/schema.js';
 import { renderPrompt } from '../prompts/engine.js';
 import { invokeAgentTurn } from './agent-turn.js';
@@ -231,6 +231,22 @@ async function runMultiAgentForecast({
       runId,
     );
     tools.push(searchTool);
+  }
+
+  const sentimentServerName = config.capabilities.sentiment;
+  if (sentimentServerName && config.mcp_servers[sentimentServerName]) {
+    try {
+      const sentimentMcpClient = new MultiServerMCPClient({
+        [sentimentServerName]: config.mcp_servers[sentimentServerName]!,
+      });
+      const rawSentimentTools = await sentimentMcpClient.getTools();
+      const sentimentTools = rawSentimentTools.map((t) => wrapSentimentTool(t));
+      tools.push(...sentimentTools);
+    } catch (err) {
+      console.warn(
+        `[WARN] Failed to connect to sentiment MCP server '${sentimentServerName}': ${err instanceof Error ? err.message : err}. Continuing with degraded sentiment.`,
+      );
+    }
   }
 
   const sandboxManager = new SandboxManager(config.sandbox);

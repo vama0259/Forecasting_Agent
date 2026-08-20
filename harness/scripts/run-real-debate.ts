@@ -24,6 +24,7 @@ import { SandboxManager } from '../src/sandbox/manager.js';
 import { SandboxBackendAdapter } from '../src/sandbox/deepagents-adapter.js';
 import { startForecastTrace, flushTraces, getLangchainCallbackHandler } from '../src/tracing/langfuse.js';
 import { buildSearchTool } from '../src/search/tool.js';
+import { wrapSentimentTool } from '../src/agents/factory.js';
 import type { AgentSignal } from '../agents/schema.js';
 import type { ParticipantAgentName } from '../agents/types.js';
 
@@ -137,6 +138,22 @@ try {
   });
   const searchTool = buildSearchTool(searchCapability);
   const tools = [...marketTools, searchTool];
+
+  const sentimentServerName = config.capabilities.sentiment;
+  if (sentimentServerName && config.mcp_servers[sentimentServerName]) {
+    try {
+      const sentimentMcpClient = new MultiServerMCPClient({
+        [sentimentServerName]: config.mcp_servers[sentimentServerName]!,
+      });
+      const rawSentimentTools = await sentimentMcpClient.getTools();
+      const sentimentTools = rawSentimentTools.map((t) => wrapSentimentTool(t));
+      tools.push(...sentimentTools);
+    } catch (err) {
+      console.warn(
+        `[WARN] Failed to connect to sentiment MCP server: ${err instanceof Error ? err.message : err}. Continuing with degraded sentiment.`,
+      );
+    }
+  }
 
   const sandboxAdapter = new SandboxBackendAdapter(sandboxManager, runId);
 
