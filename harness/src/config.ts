@@ -30,6 +30,11 @@ export const HarnessConfigSchema = z.object({
   llm: z.object({
     provider: z.string().min(1),
     model: z.string().min(1),
+    // Optional stronger model for Round 1 (independent code generation + walk-forward backtest
+    // fitting) -- the only round where agents actually write Python. Falls back to `model` when
+    // unset, so this field is non-breaking to omit. Rounds 2/3 (critique, devil's advocate) and
+    // round 4 (zero-LLM consensus) always use `model` -- no evidence they're the bottleneck.
+    code_model: z.string().min(1).optional(),
     api_key: z.string().min(1),
   }),
   mcp_servers: z.record(z.string(), McpServerSchema).default({}),

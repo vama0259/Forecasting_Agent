@@ -44,6 +44,7 @@ describe('Comprehension Gate: Dynamic Responsiveness & Identity Integrity', () =
     description: 'Analyzes target OHLCV and macro drivers.',
     promptTemplate: 'price.j2',
     allowedCapabilities: ['market_data', 'macro'],
+    primaryCapability: 'market_data',
     dataLaneDescription: 'OHLCV bars + technical indicators',
     workspaceSubpath: 'price',
     allowedWritePaths: [

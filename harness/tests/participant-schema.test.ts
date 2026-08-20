@@ -36,6 +36,7 @@ describe('Capability and Schema Strictness', () => {
       description: 'Analyzes target OHLCV, momentum indicators, moving averages, and sovereign macro drivers.',
       promptTemplate: 'price.j2',
       allowedCapabilities: ['market_data', 'macro'],
+      primaryCapability: 'market_data',
       dataLaneDescription: 'OHLCV bars + technical indicators + macro drivers',
       workspaceSubpath: 'price',
       allowedWritePaths: ['/workspace/bars.json'],

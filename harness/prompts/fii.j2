@@ -30,3 +30,7 @@ Produce a Foreign Institutional Investor (FII) intent forecast for {{ symbol }} 
      Every `value` must be a number or fact you actually read from the saved JSON files -- never
      estimate, round from memory, or invent a plausible-looking number.
    - `dissent`: optional counter-argument or institutional positioning nuance.
+   - If flows.json was empty/absent for this date: set `degraded: true` and `degraded_reason` to
+     one plain sentence stating what this call is actually based on instead (e.g. "flows data
+     unavailable for this date; this call is price/macro-only"). Do not present a price-only
+     analysis as a normal FII call without saying so.

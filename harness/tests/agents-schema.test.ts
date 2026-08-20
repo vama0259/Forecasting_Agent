@@ -103,6 +103,33 @@ describe('AgentSignalSchema', () => {
     };
     expect(() => AgentSignalSchema.parse(invalidSignal)).toThrow(/Probability for chosen direction must be >= 0\.50/);
   });
+
+  it('rejects degraded:true with no degraded_reason', () => {
+    const invalidSignal = {
+      agent_name: 'fii',
+      direction: 'down',
+      probability: 0.6,
+      confidence: 0.5,
+      horizon_days: 1,
+      evidence: [{ claim: 'test', source_capability: 'market_data', value: 1, explicit_absence: false }],
+      degraded: true,
+    };
+    expect(() => AgentSignalSchema.parse(invalidSignal)).toThrow(/degraded_reason is required/);
+  });
+
+  it('accepts degraded:true when degraded_reason is stated', () => {
+    const validSignal = {
+      agent_name: 'fii',
+      direction: 'down',
+      probability: 0.6,
+      confidence: 0.5,
+      horizon_days: 1,
+      evidence: [{ claim: 'test', source_capability: 'market_data', value: 1, explicit_absence: false }],
+      degraded: true,
+      degraded_reason: 'flows data unavailable for this date; this call is price-only',
+    };
+    expect(() => AgentSignalSchema.parse(validSignal)).not.toThrow();
+  });
 });
 
 describe('AGENT_CONFIGS', () => {

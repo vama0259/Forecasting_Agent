@@ -1,0 +1,11 @@
+### PostgreSQL Health / Docker check
+### (Tested directly in Database Tool Window)
+
+### ClickHouse Ping
+GET http://localhost:8123/ping
+
+### MinIO Console Health
+GET http://localhost:9091/minio/health/live
+
+### Langfuse Web UI
+GET http://localhost:3000/api/public/health

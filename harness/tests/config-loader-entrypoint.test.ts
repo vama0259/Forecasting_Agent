@@ -9,6 +9,7 @@ const env = {
   REDIS_URL: 'redis://127.0.0.1:6379',
   REPO_ROOT: '/repo',
   LLM_MODEL: 'm',
+  LLM_CODE_MODEL: 'm-pro',
   LLM_API_KEY: 'k',
   STORAGE_CONNECTION_STRING: 'postgres://x',
   LANGFUSE_PUBLIC_KEY: 'a',

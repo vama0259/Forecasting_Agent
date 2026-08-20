@@ -30,6 +30,14 @@ import type { ParticipantAgentName } from '../agents/types.js';
 const REPO_ROOT = process.env.REPO_ROOT ?? '/home/varunmalhotra/Desktop/Forecasting_Agent';
 process.env.REPO_ROOT = REPO_ROOT;
 const symbol = process.argv[2] ?? 'TCS.NS';
+// Optional 3rd CLI arg backdates the whole run to a historical trading day (YYYY-MM-DD), so
+// flows/delivery/option-chain data -- published by NSE only after that day's close -- is actually
+// available, instead of chronically empty on a pre-market "today" run.
+const asOfArg = process.argv[3];
+const asOfDate = asOfArg ? new Date(`${asOfArg}T00:00:00+05:30`) : new Date();
+if (asOfArg && Number.isNaN(asOfDate.getTime())) {
+  throw new Error(`Invalid --as-of date '${asOfArg}', expected YYYY-MM-DD`);
+}
 
 const config = loadConfig(join(import.meta.dirname, '..', 'harness_config.yaml'));
 const pool = new Pool({ connectionString: config.storage.connection_string });
@@ -70,7 +78,11 @@ const searchCapability = new AnySearchCapability({
 
 const registry = new CapabilityRegistry();
 registry.register('search', searchCapability);
-await registry.validateAll();
+try {
+  await registry.validateAll(10000);
+} catch (err) {
+  console.warn(`[WARN] Capability health check: ${err instanceof Error ? err.message : err}. Continuing with degraded mode.`);
+}
 
 // Market data MCP server setup
 const marketServerName = config.capabilities.market_data;
@@ -94,13 +106,26 @@ try {
   await runMigrations(pool, `${REPO_ROOT}/harness/src/storage/migrations`);
   console.error(`migrations: up to date | mem: ${memSnapshot()}`);
 
+  // Generated upfront (not looked up afterward) so Round 1's own forecasts.id/sandbox session
+  // and Rounds 2-4's debate_rounds.forecast_id are guaranteed to be the same row -- the previous
+  // "SELECT most recent forecast for this symbol" approach only worked because it usually ran
+  // right after Round 1 inserted its own row; it was a coincidence, not a guarantee.
+  const forecastId = randomUUID();
+
   console.error(`\n[DEBATE] === ROUND 1: Independent Participant Execution ===`);
-  const r1PipelineResult = await runMultiAgentPipeline({ config, pool, symbol, search: searchCapability });
+  const r1PipelineResult = await runMultiAgentPipeline({
+    config,
+    pool,
+    symbol,
+    search: searchCapability,
+    forecastId,
+    asOf: asOfDate,
+  });
   console.error(
     `[DEBATE] Round 1 complete. M8 Backtest Verdict: ${r1PipelineResult.evalResult?.verdict.status ?? 'N/A'}`,
   );
 
-  const asOf = new Date().toISOString();
+  const asOf = asOfDate.toISOString();
   const runId = `debate-${symbol}-${Date.now()}`;
   const trace = startForecastTrace(config, runId, { symbol, asOf });
   const langfuseHandler = getLangchainCallbackHandler(config);
@@ -118,19 +143,15 @@ try {
   const orchestrator = new DebateOrchestrator({ store });
 
   console.error(`\n[DEBATE] === ROUND 2 & 3: Adversarial Debate & Devil's Advocate Stress-Test ===`);
-  const forecastRes = await pool.query('SELECT id FROM forecasts WHERE symbol = $1 ORDER BY created_at DESC LIMIT 1', [
-    symbol,
-  ]);
-  let forecastId = forecastRes.rows[0]?.id;
-  if (!forecastId) {
-    forecastId = randomUUID();
-    const anchorSignal = r1PipelineResult.signals.price;
-    await pool.query(
-      `INSERT INTO forecasts (id, symbol, horizon, prediction, confidence, created_at, as_of, degraded)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), false)`,
-      [forecastId, symbol, '1d', JSON.stringify(anchorSignal), anchorSignal?.confidence ?? 0.5],
-    );
-  }
+  // Safety net only: runMultiAgentForecast's own saveForecast() call already inserts this row
+  // under forecastId. This just guards against Round 1 having thrown before reaching that save.
+  const anchorSignal = r1PipelineResult.signals.price;
+  await pool.query(
+    `INSERT INTO forecasts (id, symbol, horizon, prediction, confidence, created_at, as_of, degraded)
+     VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), false)
+     ON CONFLICT (id) DO NOTHING`,
+    [forecastId, symbol, '1d', JSON.stringify(anchorSignal), anchorSignal?.confidence ?? 0.5],
+  );
 
   const consensus = await orchestrator.runDebate({
     forecastId,
@@ -143,6 +164,7 @@ try {
     store,
     trace,
     langfuseHandler: langfuseHandler ?? undefined,
+    pool,
   });
 
   console.error(`\n[DEBATE] === ROUND 4: Deterministic Arithmetic Consensus ===`);

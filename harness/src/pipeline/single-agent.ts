@@ -118,7 +118,7 @@ async function runForecast({
     tools.push(searchTool);
   }
 
-  const sandboxManager = new SandboxManager();
+  const sandboxManager = new SandboxManager(config.sandbox);
   const adapter = new SandboxBackendAdapter(sandboxManager, runId);
 
   try {

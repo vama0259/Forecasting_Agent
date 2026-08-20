@@ -9,7 +9,7 @@ describe('EvidenceValidationMiddleware Capability Fencing', () => {
     if (!config) {
       throw new Error(`Agent config for '${agentName}' not found`);
     }
-    return buildEvidenceValidationMiddleware(config.name, config.allowedCapabilities);
+    return buildEvidenceValidationMiddleware(config.name, config.allowedCapabilities, config.primaryCapability);
   };
 
   describe('retail agent capability fencing', () => {
@@ -338,6 +338,88 @@ describe('EvidenceValidationMiddleware Capability Fencing', () => {
       };
       await (mw.afterModel as (s: unknown) => Promise<unknown>)(state);
       expect(state.structuredResponse.degraded).toBe(true);
+    });
+  });
+
+  describe('primary capability absence', () => {
+    it('marks fii degraded with a stated reason when flows is explicitly absent', async () => {
+      const mw = getMiddlewareForAgent('fii');
+      const state = {
+        structuredResponse: {
+          agent_name: 'fii',
+          direction: 'down',
+          probability: 0.6,
+          confidence: 0.5,
+          horizon_days: 1,
+          evidence: [
+            {
+              claim: 'No participant OI data published for this date',
+              source_capability: 'flows' as Capability,
+              value: null,
+              explicit_absence: true,
+            },
+          ],
+          degraded: false,
+          degraded_reason: undefined as string | undefined,
+        },
+      };
+
+      await (mw.afterModel as (s: unknown) => Promise<unknown>)(state);
+      expect(state.structuredResponse.degraded).toBe(true);
+      expect(state.structuredResponse.degraded_reason).toContain('flows');
+    });
+
+    it('does not synthesize a reason when the model already provided one', async () => {
+      const mw = getMiddlewareForAgent('retail');
+      const state = {
+        structuredResponse: {
+          agent_name: 'retail',
+          direction: 'up',
+          probability: 0.55,
+          confidence: 0.4,
+          horizon_days: 1,
+          evidence: [
+            {
+              claim: 'No delivery data published for this date',
+              source_capability: 'microstructure' as Capability,
+              value: null,
+              explicit_absence: true,
+            },
+          ],
+          degraded: true,
+          degraded_reason: 'model-provided explanation',
+        },
+      };
+
+      await (mw.afterModel as (s: unknown) => Promise<unknown>)(state);
+      expect(state.structuredResponse.degraded_reason).toBe('model-provided explanation');
+    });
+
+    it('does not mark degraded when the primary capability has real (non-absent) data', async () => {
+      const mw = getMiddlewareForAgent('dii');
+      const state = {
+        structuredResponse: {
+          agent_name: 'dii',
+          direction: 'down',
+          probability: 0.6,
+          confidence: 0.5,
+          horizon_days: 1,
+          evidence: [
+            {
+              claim: 'DII net long/short ratio is 0.6',
+              source_capability: 'flows' as Capability,
+              value: 0.6,
+              explicit_absence: false,
+            },
+          ],
+          degraded: false,
+          degraded_reason: undefined as string | undefined,
+        },
+      };
+
+      await (mw.afterModel as (s: unknown) => Promise<unknown>)(state);
+      expect(state.structuredResponse.degraded).toBe(false);
+      expect(state.structuredResponse.degraded_reason).toBeUndefined();
     });
   });
 });

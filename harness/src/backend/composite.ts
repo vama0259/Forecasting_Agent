@@ -1,9 +1,12 @@
 import { CompositeBackend, StoreBackend } from 'deepagents';
+import type { BaseSandbox } from 'deepagents';
 import type { BaseStore } from '@langchain/langgraph-checkpoint';
-import type { SandboxBackendAdapter } from '../sandbox/deepagents-adapter.js';
 
 export interface BuildAgentBackendParams {
-  sandboxAdapter: SandboxBackendAdapter;
+  // BaseSandbox (not the concrete SandboxBackendAdapter) so callers can pass a TracingSandboxAdapter
+  // wrapper -- CompositeBackend only needs the BaseSandbox interface, and the two adapters can't
+  // structurally satisfy each other's concrete type (SandboxBackendAdapter's #manager is a private field).
+  sandboxAdapter: BaseSandbox;
   store: BaseStore;
   agentName: string;
 }

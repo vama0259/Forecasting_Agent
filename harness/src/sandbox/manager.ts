@@ -125,7 +125,10 @@ export class SandboxManager {
       const container = await this.docker.createContainer({
         Image: 'forecasting-sandbox:latest',
         Cmd: ['python', '/entrypoints/validate.py'],
-        Env: [`MODEL_SCRIPT_PATH=/workspace/model.py`, `PYTHONPATH=/workspace/m8`],
+        // Keep /opt/agent_lib on the path alongside the m8 mount -- setting Env here overrides the
+        // image's own PYTHONPATH, so omitting it would make the walk-forward helper import-fail in
+        // validate even though it resolves fine in explore.
+        Env: [`MODEL_SCRIPT_PATH=/workspace/model.py`, `PYTHONPATH=/workspace/m8:/opt/agent_lib`],
         Labels: { 'sandbox.managed': 'true', 'sandbox.run_id': req.runId, 'sandbox.tier': 'validate' },
         HostConfig: {
           NetworkMode: 'none',

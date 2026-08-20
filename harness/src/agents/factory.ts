@@ -40,7 +40,7 @@ export function buildParticipantAgent({
     middleware: [
       deepSeekAutoToolChoiceMiddleware,
       buildCostBudgetMiddleware(config.maxTokenBudget),
-      buildEvidenceValidationMiddleware(config.name, config.allowedCapabilities),
+      buildEvidenceValidationMiddleware(config.name, config.allowedCapabilities, config.primaryCapability),
       buildAuditMiddleware(config.name, trace),
     ],
   });

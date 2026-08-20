@@ -382,6 +382,7 @@ describe('multi-agent pipeline', () => {
       const degradedSignal: AgentSignal = {
         ...validPriceSignal,
         degraded: true,
+        degraded_reason: 'test fixture: agent marked degraded',
       };
       mockInvoke.mockResolvedValue({
         structuredResponse: degradedSignal,

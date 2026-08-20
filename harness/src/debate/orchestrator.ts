@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import type { StructuredTool } from '@langchain/core/tools';
 import type { BaseStore } from '@langchain/langgraph-checkpoint';
 import type { HarnessConfig } from '../config.js';
@@ -9,6 +10,7 @@ import { buildParticipantAgent } from '../agents/factory.js';
 import { buildAgentBackend } from '../backend/composite.js';
 import { invokeAgentTurn } from '../pipeline/agent-turn.js';
 import { SandboxBackendAdapter } from '../sandbox/deepagents-adapter.js';
+import { TracingSandboxAdapter } from '../sandbox/tracing-adapter.js';
 import { renderPrompt, renderRound2Prompt, renderRound3Prompt } from '../prompts/engine.js';
 import {
   type DebateConsensus,
@@ -57,6 +59,10 @@ export interface RunDebateParams {
   store?: BaseStore | DebateStoreLike | undefined;
   trace?: TraceHandle | undefined;
   langfuseHandler?: ReturnType<typeof getLangchainCallbackHandler> | undefined;
+  // When provided, every .py file an agent writes during Rounds 1-3 is additionally persisted to
+  // debate_traces via TracingSandboxAdapter -- optional so callers/tests that don't need script
+  // history (or don't have a live pool) are unaffected.
+  pool?: Pool | undefined;
 }
 
 export { renderRound2Prompt, renderRound3Prompt };
@@ -170,6 +176,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
     store,
     trace,
     langfuseHandler,
+    pool,
   } = params;
 
   const asOfDate = asOf instanceof Date ? asOf : new Date(asOf);
@@ -196,6 +203,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
       confidence: 0.2,
       horizon_days: 1,
       degraded: true,
+      degraded_reason: `${name}'s Round 1 turn failed to produce a valid signal; this is a fallback placeholder, not a real forecast.`,
       evidence: [
         {
           claim: 'Fallback signal due to degraded turn execution',
@@ -216,6 +224,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
       confidence: 0.2,
       horizon_days: 1,
       degraded: true,
+      degraded_reason: `${name}'s Round 2 turn failed to produce a valid signal; this is a fallback placeholder, not a real critique.`,
       critiques: [
         {
           target_agent: 'price',
@@ -244,6 +253,7 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
       confidence: 0.2,
       horizon_days: 1,
       degraded: true,
+      degraded_reason: `${name}'s Round 3 turn failed to produce a valid signal; this is a fallback placeholder, not a real position.`,
       is_devils_advocate: false,
       catastrophic_risks: ['Fallback risk notice'],
       invalidation_triggers: ['Fallback invalidation trigger'],
@@ -285,6 +295,11 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
     );
     round1Signals = Object.fromEntries(r1Entries) as Record<ParticipantAgentName, AgentSignal>;
   } else if (config && sandboxAdapter && store) {
+    // Round 1 is the only round where agents write Python (feature scripts + price's model.py,
+    // which feeds the M8 backtest directly) -- use the stronger code_model here if configured.
+    // Rounds 2/3 keep the regular model: no evidence critique/devil's-advocate reasoning is the
+    // bottleneck, and neither writes code.
+    const round1LlmConfig = config.llm.code_model ? { ...config.llm, model: config.llm.code_model } : config.llm;
     const r1Entries = await Promise.all(
       PARTICIPANTS.map(async (name) => {
         const agentCfg = getAgentConfig(name);
@@ -294,13 +309,15 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
           horizon_days: 1,
         });
         const backend = buildAgentBackend({
-          sandboxAdapter,
+          sandboxAdapter: pool
+            ? new TracingSandboxAdapter(sandboxAdapter, { pool, forecastId, roundNumber: 1, agentName: agentCfg.name })
+            : sandboxAdapter,
           store: store as BaseStore,
           agentName: agentCfg.name,
         });
         const agent = buildParticipantAgent({
           config: agentCfg,
-          llmConfig: config.llm,
+          llmConfig: round1LlmConfig,
           tools: safeTools,
           backend,
           trace,
@@ -396,7 +413,9 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
           peer_signals: round1Signals,
         });
         const backend = buildAgentBackend({
-          sandboxAdapter,
+          sandboxAdapter: pool
+            ? new TracingSandboxAdapter(sandboxAdapter, { pool, forecastId, roundNumber: 2, agentName: agentCfg.name })
+            : sandboxAdapter,
           store: store as BaseStore,
           agentName: agentCfg.name,
         });
@@ -514,7 +533,9 @@ export async function runDebate(params: RunDebateParams): Promise<DebateConsensu
           is_devils_advocate: isDA,
         });
         const backend = buildAgentBackend({
-          sandboxAdapter,
+          sandboxAdapter: pool
+            ? new TracingSandboxAdapter(sandboxAdapter, { pool, forecastId, roundNumber: 3, agentName: agentCfg.name })
+            : sandboxAdapter,
           store: store as BaseStore,
           agentName: agentCfg.name,
         });

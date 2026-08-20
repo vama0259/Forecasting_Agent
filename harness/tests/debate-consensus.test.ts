@@ -83,6 +83,7 @@ describe('Deterministic Arithmetic Consensus Engine', () => {
       },
     ],
     degraded,
+    degraded_reason: degraded ? 'test fixture: agent marked degraded' : undefined,
     round: 3,
     is_devils_advocate: false,
     catastrophic_risks,

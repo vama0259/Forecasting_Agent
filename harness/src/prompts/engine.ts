@@ -39,9 +39,14 @@ export interface PromptContext {
 }
 
 export function renderPrompt(config: ParticipantAgentConfig, context: PromptContext): string {
+  // 750 calendar days (~536 trading bars), not 120 (~85 bars). At 120 the agents fit 13 features
+  // across 5 models on ~45 training rows -- ~3.5 rows per feature, deep in overfitting territory,
+  // and measurably so: the trivial `drift` baseline's Brier improves 0.269 -> 0.241 (from worse
+  // than a flat 0.5 guess to better than one) purely from the longer window. A starved window was
+  // capping every model in the system, not just the agents'.
   const start_date =
     context.start_date ||
-    new Date(new Date(context.as_of).getTime() - 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    new Date(new Date(context.as_of).getTime() - 750 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   return env.render(config.promptTemplate, {
     horizon_days: context.horizon_days ?? config.horizon_days,

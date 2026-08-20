@@ -54,6 +54,7 @@ venv/
 # IDE
 .vscode/
 .idea/
+.mcp.json
 
 # Testing & quality
 .pytest_cache/

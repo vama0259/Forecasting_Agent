@@ -1,6 +1,7 @@
 llm:
   provider: deepseek
   model: ${LLM_MODEL}
+  code_model: ${LLM_CODE_MODEL}
   api_key: ${LLM_API_KEY}
 
 mcp_servers:
@@ -50,5 +51,10 @@ search:
     - nseindia.com
 
 sandbox:
-  timeoutMs: 120000
+  # 120s was sized for the old 120-day (~85 bar) window. At the 750-day (~536 bar) window the
+  # price agent's walk-forward script -- which refits Ridge/LightGBM/CatBoost/AutoReg/GARCH at
+  # each of ~470 steps on an expanding window -- measured 94s in this exact image, leaving only
+  # 26s of headroom on a script the agent rewrites every run. 300s restores real margin while
+  # still catching a genuinely hung script.
+  timeoutMs: 300000
 eval: {}

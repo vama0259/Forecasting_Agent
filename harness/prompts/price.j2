@@ -12,13 +12,35 @@ Produce a price-direction forecast for {{ symbol }} (NSE) as of {{ as_of }}.
    - Always load data dynamically with `json.load(open('/workspace/bars.json'))`.
    - Engineer feature signals: lagged log returns (1d, 3d, 5d, 10d), rolling realized volatility, RSI/MFI momentum, volume ratios, and Kalman-filtered trend (`filterpy`, `scipy`).
    - Fit predictive models using installed ML/econometric libraries (`lightgbm`, `catboost`, `scikit-learn`, `statsmodels` AutoReg/ARIMA, `arch` GARCH).
-   - Fit and predict walk-forward only: for each step `i`, fit using only bars strictly before `i`
-     (an expanding or rolling window ending at `i-1`), then predict step `i`. Never fit once on
-     the full series and evaluate on the same data -- that leaks future information into
-     `forecasts[i]`/`calls[i]` and makes the M8 backtest meaningless even though it will still run.
-   - Generate out-of-sample predicted return `forecasts[i]` and advance probability `calls[i] = P(return > 0)`.
-   - Set `trade_side[i] = "buy"` if `calls[i] > 0.5`, else `"hold"`.
-   - Set `position_notional[i] = 10000.0` when `trade_side[i] == "buy"`, else `0.0`.
+   - Fit and predict walk-forward only, and you MUST get the train/test indices from the provided
+     helper rather than writing the loop bounds yourself:
+
+     ```python
+     from walkforward import walk_forward_steps, calculate_calibrated_probability   # preinstalled, no dependencies
+     for train_rows, predict_row in walk_forward_steps(len(bars), min_train=45, feature_start=21):
+         X = features[train_rows]; y = targets[train_rows]   # targets[j] is the return at j+1
+         # fit on X, y, then predict features[predict_row] -> forecasts[i] (predicted return)
+         # compute calibrated probability:
+         # calls[i] = calculate_calibrated_probability(predicted_return=forecasts[i], realized_volatility=rolling_vol[predict_row])
+     ```
+
+     Hand-rolling this loop is how leakage gets in: if a training pair is (features at `j`, return
+     at `j+1`), then including `j == predict_row` puts the exact row being predicted, together with
+     its own answer, into its own training set. One such row out of 400 is enough to move a MASE
+     ratio from 1.007 to 0.933 and a fold win rate from 2/5 to 5/5 -- a backtest that looks strong
+     and means nothing. The helper's bounds are exclusive by construction; do not reimplement them.
+   - Never fit once on the full series and evaluate on the same data -- that leaks future
+     information into `forecasts[i]`/`calls[i]` and makes the M8 backtest meaningless even though
+     it will still run.
+   - Keep execution direct and efficient:
+     1. Write `/workspace/model.py` using `walk_forward_steps` and `calculate_calibrated_probability`.
+     2. Use fast, heavily-regularized estimators (e.g. `Ridge(alpha=100.0)` or `Ridge(alpha=50.0)`) with standardized features to prevent overfitting to 1-day noise.
+     3. Generate out-of-sample predicted return `forecasts[i]` and calibrated advance probability `calls[i] = P(return > 0)` via `calculate_calibrated_probability(forecasts[i], rolling_vol)`.
+     4. Set `trade_side[i] = "buy"` if `calls[i] > 0.5`, else `"hold"`.
+     5. Set `position_notional[i] = 50000.0` when `trade_side[i] == "buy"`, else `0.0`.
+     6. Run `/workspace/model.py` once to verify `/tmp/eval_request.json` is generated with valid finite arrays and `segment: "EQUITY_FUTURES"`.
+     7. Do NOT execute ad-hoc shuffle scripts, diagnostic permutations, or multiple exploratory trials — the evaluation harness handles formal validation automatically.
+     8. Immediately call `AgentSignal` to submit your final structured response.
 
 3. {{ macros.eval_contract(symbol, as_of) }}
 

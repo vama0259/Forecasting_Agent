@@ -14,6 +14,7 @@ import { invokeAgentTurn } from './agent-turn.js';
 import { buildAgentBackend } from '../backend/composite.js';
 import { SandboxManager } from '../sandbox/manager.js';
 import { SandboxBackendAdapter } from '../sandbox/deepagents-adapter.js';
+import { TracingSandboxAdapter } from '../sandbox/tracing-adapter.js';
 import { ValidationFailedError, type EvalResult as SandboxEvalResult } from '../sandbox/types.js';
 import { saveForecast, saveAgentSignal, saveEvalResults } from '../storage/repository.js';
 import { startForecastTrace, flushTraces, getLangchainCallbackHandler } from '../tracing/langfuse.js';
@@ -36,6 +37,16 @@ export interface RunMultiAgentPipelineParams {
   symbol: string;
   search?: (SearchCapability & SearchRunLifecycle) | undefined;
   store?: BaseStore | undefined;
+  // When provided, used as both the Round 1 sandbox session id AND the forecasts.id row this
+  // pipeline inserts -- lets a caller (e.g. run-real-debate.ts) unify Round 1's identifier with
+  // the one Rounds 2-4 use, instead of each round generating its own disconnected UUID and a
+  // caller having to guess the linkage back together via a "most recent row" query. Falls back
+  // to a fresh randomUUID() when omitted, so standalone callers are unaffected.
+  forecastId?: string | undefined;
+  // Backdates Round 1's data fetch and prompt as_of to a historical trading day (for benchmarking
+  // against a date where NSE's flows/delivery/option-chain files have actually been published,
+  // rather than the current date's not-yet-published gap). Falls back to now() when omitted.
+  asOf?: Date | undefined;
 }
 
 export interface RunMultiAgentPipelineResult {
@@ -53,8 +64,12 @@ export async function dispatchParticipantAgents(params: {
   llmConfig: HarnessConfig['llm'];
   trace: TraceHandle;
   langfuseHandler: ReturnType<typeof getLangchainCallbackHandler>;
+  // When provided (with forecastId), every .py file each agent writes during this Round 1
+  // dispatch is additionally persisted to debate_traces via TracingSandboxAdapter.
+  pool?: Pool | undefined;
+  forecastId?: string | undefined;
 }): Promise<ParticipantExecutionResult[]> {
-  const { symbol, asOf, tools, sandboxAdapter, store, llmConfig, trace, langfuseHandler } = params;
+  const { symbol, asOf, tools, sandboxAdapter, store, llmConfig, trace, langfuseHandler, pool, forecastId } = params;
 
   const results = await Promise.allSettled(
     AGENT_CONFIGS.map(async (config) => {
@@ -65,7 +80,10 @@ export async function dispatchParticipantAgents(params: {
       });
 
       const backend = buildAgentBackend({
-        sandboxAdapter,
+        sandboxAdapter:
+          pool && forecastId
+            ? new TracingSandboxAdapter(sandboxAdapter, { pool, forecastId, roundNumber: 1, agentName: config.name })
+            : sandboxAdapter,
         store,
         agentName: config.name,
       });
@@ -150,9 +168,11 @@ export async function runMultiAgentPipeline({
   symbol,
   search,
   store,
+  forecastId,
+  asOf: asOfOverride,
 }: RunMultiAgentPipelineParams): Promise<RunMultiAgentPipelineResult> {
-  const runId = randomUUID();
-  const asOf = new Date();
+  const runId = forecastId ?? randomUUID();
+  const asOf = asOfOverride ?? new Date();
   const trace = startForecastTrace(config, runId, { symbol, asOf: asOf.toISOString() });
   const langfuseHandler = getLangchainCallbackHandler(config);
 
@@ -213,7 +233,7 @@ async function runMultiAgentForecast({
     tools.push(searchTool);
   }
 
-  const sandboxManager = new SandboxManager();
+  const sandboxManager = new SandboxManager(config.sandbox);
   const sandboxAdapter = new SandboxBackendAdapter(sandboxManager, runId);
   const store = externalStore ?? new PostgresStore({ pool });
 
@@ -230,6 +250,8 @@ async function runMultiAgentForecast({
       llmConfig: config.llm,
       trace,
       langfuseHandler,
+      pool,
+      forecastId: runId,
     });
 
     for (const res of participantResults) {
@@ -290,6 +312,7 @@ async function runMultiAgentForecast({
     }
 
     await saveForecast(pool, {
+      id: runId,
       symbol,
       horizon: `${anchorSignal.horizon_days}d`,
       prediction: anchorSignal,

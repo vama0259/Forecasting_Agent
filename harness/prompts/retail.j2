@@ -31,3 +31,7 @@ Produce a Retail & Microstructure intent forecast for {{ symbol }} (NSE) as of {
      Every `value` must be a number or fact you actually read from the saved JSON files -- never
      estimate, round from memory, or invent a plausible-looking number.
    - `dissent`: optional contrarian retail sentiment warning.
+   - If microstructure.json/option_chain.json were empty/absent for this date: set `degraded: true`
+     and `degraded_reason` to one plain sentence stating what this call is actually based on
+     instead. Do not present a price-only analysis as a normal retail/microstructure call without
+     saying so.

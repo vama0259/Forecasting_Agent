@@ -7,12 +7,16 @@ export const ParticipantAgentConfigSchema = z.object({
   description: z.string(),
   promptTemplate: z.string(),
   allowedCapabilities: z.array(CapabilitySchema),
+  // The capability that makes this agent's role distinct (flows for fii/dii, microstructure for
+  // retail, market_data for price) -- explicit_absence on THIS capability's evidence forces
+  // degraded=true, since without it the agent is just re-deriving a price opinion under its label.
+  primaryCapability: CapabilitySchema,
   dataLaneDescription: z.string(),
   workspaceSubpath: z.string(),
   allowedWritePaths: z.array(z.string()),
   tools: z.array(z.string()),
   skills: z.array(z.string()).default([]),
-  maxTokenBudget: z.number().int().positive().default(1_000_000),
+  maxTokenBudget: z.number().int().positive().default(3_000_000),
   horizon_days: z.literal(1),
   generatedBy: z.enum(['human', 'agent']).default('human'),
 });
@@ -26,6 +30,7 @@ export const AGENT_CONFIGS: ParticipantAgentConfig[] = [
     description: 'Analyzes target OHLCV, momentum indicators, moving averages, and sovereign macro drivers.',
     promptTemplate: 'price.j2',
     allowedCapabilities: ['market_data', 'macro'],
+    primaryCapability: 'market_data',
     dataLaneDescription: 'OHLCV bars + technical indicators + macro drivers (USDINR, Brent, US10Y)',
     workspaceSubpath: 'price',
     allowedWritePaths: [
@@ -36,7 +41,7 @@ export const AGENT_CONFIGS: ParticipantAgentConfig[] = [
     ],
     tools: ['fetch_ohlcv'],
     skills: [],
-    maxTokenBudget: 1_000_000,
+    maxTokenBudget: 3_000_000,
     horizon_days: 1,
     generatedBy: 'human',
   },
@@ -47,6 +52,7 @@ export const AGENT_CONFIGS: ParticipantAgentConfig[] = [
       'Analyzes foreign institutional positioning, Index Futures Long/Short ratios, and cross-border risk-off momentum.',
     promptTemplate: 'fii.j2',
     allowedCapabilities: ['market_data', 'flows', 'macro'],
+    primaryCapability: 'flows',
     dataLaneDescription: 'Participant-wise F&O open interest (FII Long/Short ratios) + market-wide flows + OHLCV',
     workspaceSubpath: 'fii',
     allowedWritePaths: [
@@ -57,7 +63,7 @@ export const AGENT_CONFIGS: ParticipantAgentConfig[] = [
     ],
     tools: ['fetch_flows', 'fetch_ohlcv', 'search_news'],
     skills: [],
-    maxTokenBudget: 1_000_000,
+    maxTokenBudget: 3_000_000,
     horizon_days: 1,
     generatedBy: 'human',
   },
@@ -68,6 +74,7 @@ export const AGENT_CONFIGS: ParticipantAgentConfig[] = [
       'Analyzes domestic mutual fund absorption, SIP structural liquidity support, and counter-cyclical accumulation.',
     promptTemplate: 'dii.j2',
     allowedCapabilities: ['market_data', 'flows', 'macro'],
+    primaryCapability: 'flows',
     dataLaneDescription:
       'Participant-wise F&O open interest (DII Long/Short ratios) + domestic cash flow resilience + OHLCV',
     workspaceSubpath: 'dii',
@@ -79,7 +86,7 @@ export const AGENT_CONFIGS: ParticipantAgentConfig[] = [
     ],
     tools: ['fetch_flows', 'fetch_ohlcv', 'search_news'],
     skills: [],
-    maxTokenBudget: 1_000_000,
+    maxTokenBudget: 3_000_000,
     horizon_days: 1,
     generatedBy: 'human',
   },
@@ -90,6 +97,7 @@ export const AGENT_CONFIGS: ParticipantAgentConfig[] = [
       'Analyzes security-wise Bhavcopy delivery percentages, option chain Put-Call ratios (PCR), and retail sentiment froth.',
     promptTemplate: 'retail.j2',
     allowedCapabilities: ['market_data', 'microstructure', 'sentiment'],
+    primaryCapability: 'microstructure',
     dataLaneDescription: 'Security delivery % + Bulk/Block deals + Option Chain Strike OI + OHLCV',
     workspaceSubpath: 'retail',
     allowedWritePaths: [
@@ -101,7 +109,7 @@ export const AGENT_CONFIGS: ParticipantAgentConfig[] = [
     ],
     tools: ['fetch_microstructure', 'fetch_option_chain', 'fetch_ohlcv', 'search_news'],
     skills: [],
-    maxTokenBudget: 1_000_000,
+    maxTokenBudget: 3_000_000,
     horizon_days: 1,
     generatedBy: 'human',
   },

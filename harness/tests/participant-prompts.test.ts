@@ -10,6 +10,7 @@ describe('Participant Prompt Templates', () => {
     | 'roleTitle'
     | 'description'
     | 'allowedCapabilities'
+    | 'primaryCapability'
     | 'dataLaneDescription'
     | 'workspaceSubpath'
     | 'allowedWritePaths'
@@ -29,6 +30,7 @@ describe('Participant Prompt Templates', () => {
       description: 'FII intent',
       promptTemplate: 'fii.j2',
       allowedCapabilities: ['market_data', 'flows', 'macro'],
+      primaryCapability: 'flows',
       dataLaneDescription: 'flows',
       workspaceSubpath: 'fii',
       allowedWritePaths: ['/workspace/code/features/fii/**'],
@@ -50,6 +52,7 @@ describe('Participant Prompt Templates', () => {
       description: 'DII intent',
       promptTemplate: 'dii.j2',
       allowedCapabilities: ['market_data', 'flows', 'macro'],
+      primaryCapability: 'flows',
       dataLaneDescription: 'flows',
       workspaceSubpath: 'dii',
       allowedWritePaths: ['/workspace/code/features/dii/**'],
@@ -69,6 +72,7 @@ describe('Participant Prompt Templates', () => {
       description: 'Retail intent',
       promptTemplate: 'retail.j2',
       allowedCapabilities: ['market_data', 'microstructure', 'sentiment'],
+      primaryCapability: 'microstructure',
       dataLaneDescription: 'microstructure',
       workspaceSubpath: 'retail',
       allowedWritePaths: ['/workspace/code/features/retail/**'],
