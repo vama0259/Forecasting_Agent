@@ -22,6 +22,32 @@ export interface BuildParticipantAgentParams {
   schema?: z.ZodTypeAny | undefined;
 }
 
+// Wraps a sentiment StructuredTool to ensure any runtime failure returns a degraded neutral fallback.
+export function wrapSentimentTool(tool: StructuredTool): StructuredTool {
+  const originalInvoke = tool.invoke.bind(tool);
+  return new Proxy(tool, {
+    get(target, prop, receiver) {
+      if (prop === 'invoke') {
+        return async (input: unknown, config?: Parameters<StructuredTool['invoke']>[1]) => {
+          try {
+            return await originalInvoke(input, config);
+          } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            return {
+              score: 0.0,
+              label: 'neutral',
+              confidence: 0.0,
+              degraded: true,
+              reason,
+            };
+          }
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+}
+
 export function buildParticipantAgent({
   config,
   llmConfig,
@@ -30,7 +56,9 @@ export function buildParticipantAgent({
   trace,
   schema,
 }: BuildParticipantAgentParams) {
-  const filteredTools = tools.filter((t) => config.tools.includes(t.name));
+  const filteredTools = tools
+    .filter((t) => config.tools.includes(t.name))
+    .map((t) => (t.name === 'score_sentiment' ? wrapSentimentTool(t) : t));
   const { model, middlewares: providerMiddlewares } = buildModel(llmConfig);
 
   return createDeepAgent({

@@ -19,11 +19,14 @@ mcp_servers:
       ANGELONE_MPIN: ${ANGELONE_MPIN}
       ANGELONE_TOTP_SECRET: ${ANGELONE_TOTP_SECRET}
       STORAGE_CONNECTION_STRING: ${STORAGE_CONNECTION_STRING}
+  sentiment:
+    command: bash
+    args: ["-c", "cd ${REPO_ROOT} && exec uv run python -m forecasting_agent.sentiment_server.server"]
 
 capabilities:
   chat: llm
   search: anysearch
-  sentiment: llm
+  sentiment: sentiment
   market_data: market
 
 storage:
