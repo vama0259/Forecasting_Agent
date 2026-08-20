@@ -67,6 +67,26 @@ class CalibrationBin(BaseModel):
     mean_observed: float
 
 
+class BrierDecomposition(BaseModel):
+    """Murphy decomposition of a Brier score: Brier = reliability - resolution + uncertainty."""
+
+    reliability: float
+    resolution: float
+    uncertainty: float
+    base_rate: float
+
+
+class DirectionHitRate(BaseModel):
+    """Directional accuracy over committed (non-0.5) calls, with a normal-approximation z against a fair coin."""
+
+    hits: int
+    # Counts only committed calls -- abstentions (exactly 0.5) are excluded, so this can be well
+    # below the number of scored observations for a forecaster that often declines to call.
+    n: int
+    rate: float
+    z_vs_coin: float
+
+
 class LayerScore(BaseModel):
     """Evaluation score and optional diagnostic metadata for a single layer on a single fold."""
 
@@ -78,6 +98,13 @@ class LayerScore(BaseModel):
     zero_forecast_mase: float | None = None
     beats_zero: bool | None = None
     annualized: bool | None = None
+    # Phase 1 & 2 Extensions:
+    ece: float | None = None
+    pearson_ic: float | None = None
+    rank_ic: float | None = None
+    profit_factor: float | None = None
+    max_drawdown: float | None = None
+    calmar_ratio: float | None = None
 
 
 class LayerMean(BaseModel):
@@ -97,8 +124,13 @@ class GateVerdict(BaseModel):
 
 
 class EvalResult(BaseModel):
-    """Complete evaluation result holding the gate verdict, per-fold layer scores, and layer means."""
+    """Gate verdict, per-fold layer scores, layer means, and diagnostics pooled over all test observations."""
 
     verdict: GateVerdict
     layers: Sequence[LayerScore]
     layer_means: dict[Literal[1, 2, 3], LayerMean]
+    # Pooled over every test observation across surviving folds, not averaged over folds: a binomial
+    # z-statistic and a bin-based decomposition are only meaningful at the observation level, and
+    # averaging per-fold values would silently understate n by ~an order of magnitude.
+    direction: DirectionHitRate | None = None
+    brier_split: BrierDecomposition | None = None

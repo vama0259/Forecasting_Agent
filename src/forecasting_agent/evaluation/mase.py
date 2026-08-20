@@ -39,3 +39,29 @@ def mase(y_train: NDArray[np.float64], y_test: NDArray[np.float64], forecast: ND
 def zero_forecast_mase(y_train: NDArray[np.float64], y_test: NDArray[np.float64]) -> float:
     """Takes train and test returns arrays; returns MASE score against an all-zero forecast series."""
     return mase(y_train, y_test, np.zeros_like(y_test))
+
+
+def information_coefficient(forecasts: NDArray[np.float64], returns: NDArray[np.float64]) -> tuple[float, float]:
+    """Takes forecasts and returns arrays; returns (pearson_ic, rank_ic) correlation coefficients."""
+    n = len(forecasts)
+    if n < 2:
+        return 0.0, 0.0
+
+    std_f = float(np.std(forecasts))
+    std_r = float(np.std(returns))
+    if std_f <= 1e-12 or std_r <= 1e-12:
+        return 0.0, 0.0
+
+    # Pearson Linear IC
+    pearson = float(np.corrcoef(forecasts, returns)[0, 1])
+    if not math.isfinite(pearson):
+        pearson = 0.0
+
+    # Spearman Rank IC
+    rank_f = np.argsort(np.argsort(forecasts)).astype(np.float64)
+    rank_r = np.argsort(np.argsort(returns)).astype(np.float64)
+    rank_ic = float(np.corrcoef(rank_f, rank_r)[0, 1])
+    if not math.isfinite(rank_ic):
+        rank_ic = 0.0
+
+    return pearson, rank_ic

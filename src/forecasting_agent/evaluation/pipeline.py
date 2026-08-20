@@ -2,11 +2,23 @@ from typing import Literal
 
 import numpy as np
 
-from forecasting_agent.evaluation.brier import brier, calibration_bins
+from forecasting_agent.evaluation.brier import (
+    brier,
+    brier_decomposition,
+    calibration_bins,
+    direction_hit_rate,
+    expected_calibration_error,
+)
 from forecasting_agent.evaluation.fees import IndianFeeSchedule, TradeSide
 from forecasting_agent.evaluation.gate import run_gate
-from forecasting_agent.evaluation.mase import mase, zero_forecast_mase
-from forecasting_agent.evaluation.sortino import cost_adjusted_period_returns, sortino
+from forecasting_agent.evaluation.mase import information_coefficient, mase, zero_forecast_mase
+from forecasting_agent.evaluation.sortino import (
+    calmar_ratio,
+    cost_adjusted_period_returns,
+    max_drawdown,
+    profit_factor,
+    sortino,
+)
 from forecasting_agent.evaluation.types import EvalRequest, EvalResult, LayerMean, LayerScore
 from forecasting_agent.evaluation.walk_forward import PurgedWalkForward
 
@@ -44,6 +56,7 @@ def evaluate(
         l1_val = mase(y_train, y_test, l1_forecast)
         l1_zero = zero_forecast_mase(y_train, y_test)
         l1_beats_zero = l1_val < l1_zero
+        p_ic, r_ic = information_coefficient(l1_forecast, y_test)
         layers.append(
             LayerScore(
                 layer=1,
@@ -51,6 +64,8 @@ def evaluate(
                 value=l1_val,
                 zero_forecast_mase=l1_zero,
                 beats_zero=l1_beats_zero,
+                pearson_ic=p_ic,
+                rank_ic=r_ic,
             )
         )
 
@@ -58,12 +73,14 @@ def evaluate(
         l2_returns = y_test
         l2_val = brier(l2_calls, l2_returns)
         l2_bins = calibration_bins(l2_calls, l2_returns)
+        l2_ece = expected_calibration_error(l2_calls, l2_returns)
         layers.append(
             LayerScore(
                 layer=2,
                 fold_number=fn,
                 value=l2_val,
                 calibration_bins=l2_bins,
+                ece=l2_ece,
             )
         )
 
@@ -81,6 +98,9 @@ def evaluate(
             schedule=schedule,
         )
         sortino_res = sortino(period_returns)
+        l3_pf = profit_factor(period_returns)
+        l3_mdd = max_drawdown(period_returns)
+        l3_calmar = calmar_ratio(period_returns)
         layers.append(
             LayerScore(
                 layer=3,
@@ -88,6 +108,9 @@ def evaluate(
                 value=sortino_res.value,
                 annualized=sortino_res.annualized,
                 note=sortino_res.note,
+                profit_factor=l3_pf,
+                max_drawdown=l3_mdd,
+                calmar_ratio=l3_calmar,
             )
         )
 
@@ -97,4 +120,16 @@ def evaluate(
         if len(vals) >= 2:
             layer_means[layer_id] = LayerMean(mean=float(np.mean(vals)), n_folds=len(vals))
 
-    return EvalResult(verdict=verdict, layers=layers, layer_means=layer_means)
+    # Pool every surviving fold's test observations before computing the directional and
+    # decomposition diagnostics -- see the note on EvalResult for why these cannot be fold-averaged.
+    pooled_idx = [idx for fold in verdict.folds for idx in fold.test_idx]
+    pooled_calls = calls_arr[pooled_idx]
+    pooled_returns = returns_arr[pooled_idx]
+
+    return EvalResult(
+        verdict=verdict,
+        layers=layers,
+        layer_means=layer_means,
+        direction=direction_hit_rate(pooled_calls, pooled_returns),
+        brier_split=brier_decomposition(pooled_calls, pooled_returns),
+    )
