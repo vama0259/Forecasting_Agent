@@ -94,6 +94,7 @@ class HeadlineInput(BaseModel):
     text: str = Field(..., max_length=512, description="Headline or snippet text")
     timestamp: str | None = Field(None, description="ISO-8601 timestamp of publication")
 
+
 class HeadlineScore(BaseModel):
     text: str
     positive: float
@@ -101,6 +102,7 @@ class HeadlineScore(BaseModel):
     neutral: float
     score: float
     weight: float
+
 
 class SentimentResponse(BaseModel):
     score: float = Field(..., description="Aggregated polarity in [-1.0, 1.0]")
