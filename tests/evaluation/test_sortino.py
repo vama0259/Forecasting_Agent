@@ -22,7 +22,20 @@ def test_constants_are_the_named_module_values() -> None:
     assert MIN_OBS_FOR_ANNUALIZATION == 20
 
 
-def test_exposure_weighted_period_return_matches_the_worked_example() -> None:
+def test_short_position_profits_when_underlying_falls() -> None:
+    period = cost_adjusted_period_returns(
+        returns=np.array([-0.01]),
+        position_notional=np.array([10_000.0]),
+        trade_side=["sell"],
+        timestamps=[TRADE_DATE],
+        segment="EQUITY_DELIVERY",
+        capital=1_000_000.0,
+        schedule=IndianFeeSchedule(),
+    )
+    assert period[0] == pytest.approx(7.428594e-05, rel=1e-6)
+
+
+def test_short_position_loses_when_underlying_rises() -> None:
     period = cost_adjusted_period_returns(
         returns=np.array([0.01]),
         position_notional=np.array([10_000.0]),
@@ -32,8 +45,7 @@ def test_exposure_weighted_period_return_matches_the_worked_example() -> None:
         capital=1_000_000.0,
         schedule=IndianFeeSchedule(),
     )
-    assert period[0] == pytest.approx(7.428594e-05, rel=1e-6)
-    assert period[0] != pytest.approx(0.00998466, rel=1e-6)
+    assert period[0] == pytest.approx(-0.00012571406, rel=1e-6)
 
 
 def test_flat_hold_period_absorbs_no_market_loss() -> None:
@@ -49,7 +61,7 @@ def test_flat_hold_period_absorbs_no_market_loss() -> None:
     assert period[0] == 0.0
 
 
-def test_hold_with_carried_notional_is_still_exposure_weighted_but_free() -> None:
+def test_hold_with_carried_notional_has_no_market_exposure() -> None:
     period = cost_adjusted_period_returns(
         returns=np.array([-0.05]),
         position_notional=np.array([10_000.0]),
@@ -59,7 +71,31 @@ def test_hold_with_carried_notional_is_still_exposure_weighted_but_free() -> Non
         capital=1_000_000.0,
         schedule=IndianFeeSchedule(),
     )
-    assert period[0] == pytest.approx(-0.0005, rel=1e-12)
+    assert period[0] == 0.0
+
+
+@pytest.mark.parametrize("side", ["buy", "sell"])
+def test_slippage_is_adverse_for_both_long_and_short_positions(side: str) -> None:
+    without_slippage = cost_adjusted_period_returns(
+        returns=np.array([0.01]),
+        position_notional=np.array([10_000.0]),
+        trade_side=[side],  # type: ignore[list-item]
+        timestamps=[TRADE_DATE],
+        segment="EQUITY_DELIVERY",
+        capital=1_000_000.0,
+        schedule=IndianFeeSchedule(),
+    )
+    with_slippage = cost_adjusted_period_returns(
+        returns=np.array([0.01]),
+        position_notional=np.array([10_000.0]),
+        trade_side=[side],  # type: ignore[list-item]
+        timestamps=[TRADE_DATE],
+        segment="EQUITY_DELIVERY",
+        capital=1_000_000.0,
+        schedule=IndianFeeSchedule(),
+        slippage_rates=[0.001],
+    )
+    assert with_slippage[0] < without_slippage[0]
 
 
 def test_downside_deviation_divides_by_n_not_by_the_negative_count() -> None:

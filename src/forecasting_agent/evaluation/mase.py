@@ -41,6 +41,14 @@ def zero_forecast_mase(y_train: NDArray[np.float64], y_test: NDArray[np.float64]
     return mase(y_train, y_test, np.zeros_like(y_test))
 
 
+def _average_ranks(values: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Takes numeric values; returns zero-based ranks with tied values assigned their average rank."""
+    _, inverse, counts = np.unique(values, return_inverse=True, return_counts=True)
+    starts = np.cumsum(counts) - counts
+    average_ranks = starts + (counts - 1) / 2.0
+    return average_ranks[inverse].astype(np.float64)
+
+
 def information_coefficient(forecasts: NDArray[np.float64], returns: NDArray[np.float64]) -> tuple[float, float]:
     """Takes forecasts and returns arrays; returns (pearson_ic, rank_ic) correlation coefficients."""
     n = len(forecasts)
@@ -58,8 +66,8 @@ def information_coefficient(forecasts: NDArray[np.float64], returns: NDArray[np.
         pearson = 0.0
 
     # Spearman Rank IC
-    rank_f = np.argsort(np.argsort(forecasts)).astype(np.float64)
-    rank_r = np.argsort(np.argsort(returns)).astype(np.float64)
+    rank_f = _average_ranks(forecasts)
+    rank_r = _average_ranks(returns)
     rank_ic = float(np.corrcoef(rank_f, rank_r)[0, 1])
     if not math.isfinite(rank_ic):
         rank_ic = 0.0

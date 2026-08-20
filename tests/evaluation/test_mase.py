@@ -9,7 +9,13 @@ from hypothesis import strategies as st
 from numpy.typing import NDArray
 
 from forecasting_agent.evaluation.errors import DegenerateBaselineError
-from forecasting_agent.evaluation.mase import mase, naive_forecast, train_baseline, zero_forecast_mase
+from forecasting_agent.evaluation.mase import (
+    information_coefficient,
+    mase,
+    naive_forecast,
+    train_baseline,
+    zero_forecast_mase,
+)
 
 NAIVE_ON_SEEDED = 1.0620844567408834
 ZERO_ON_SEEDED = 0.7588485867586092
@@ -47,6 +53,13 @@ def test_naive_forecast_is_last_observed_carried_forward() -> None:
     train = np.array([1.0, 2.0, 3.0])
     test = np.array([10.0, 20.0, 30.0])
     assert np.array_equal(naive_forecast(train, test), np.array([3.0, 10.0, 20.0]))
+
+
+def test_rank_ic_uses_average_ranks_for_tied_values() -> None:
+    forecasts = np.array([1.0, 1.0, 2.0, 3.0])
+    returns = np.array([1.0, 2.0, 2.0, 3.0])
+    _, rank_ic = information_coefficient(forecasts, returns)
+    assert rank_ic == pytest.approx(5.0 / 6.0, rel=1e-12)
 
 
 def test_train_baseline_is_unguarded_and_reports_each_degenerate_shape() -> None:

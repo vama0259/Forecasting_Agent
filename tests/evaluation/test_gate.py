@@ -48,6 +48,26 @@ def test_timestamps_after_as_of_make_the_run_invalid() -> None:
     assert "timestamps_exceed_as_of" in verdict.reasons
 
 
+def test_out_of_order_timestamps_make_the_run_invalid() -> None:
+    request = _request(_varied(60))
+    timestamps = list(request.timestamps)
+    timestamps[20], timestamps[21] = timestamps[21], timestamps[20]
+    request = request.model_copy(update={"timestamps": timestamps})
+    verdict = run_gate(request, PurgedWalkForward(n_splits=3, gap=2, horizon=1))
+    assert verdict.status == "INVALID"
+    assert "timestamps_not_strictly_increasing" in verdict.reasons
+
+
+def test_duplicate_timestamps_make_the_run_invalid() -> None:
+    request = _request(_varied(60))
+    timestamps = list(request.timestamps)
+    timestamps[21] = timestamps[20]
+    request = request.model_copy(update={"timestamps": timestamps})
+    verdict = run_gate(request, PurgedWalkForward(n_splits=3, gap=2, horizon=1))
+    assert verdict.status == "INVALID"
+    assert "timestamps_not_strictly_increasing" in verdict.reasons
+
+
 def test_infeasible_split_is_run_level_and_never_populates_skipped() -> None:
     verdict = run_gate(_request(_varied(10)), PurgedWalkForward(n_splits=4, gap=2, horizon=1))
     assert verdict.status == "INVALID"

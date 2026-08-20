@@ -53,6 +53,11 @@ def test_length_mismatch_names_every_offending_field_and_its_length() -> None:
     assert "calls" in message
 
 
+def test_empty_series_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="returns must not be empty"):
+        EvalRequest(**_kwargs(returns=[], forecasts=[], calls=[], timestamps=[], position_notional=[], trade_side=[]))  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize("bad_capital", [0.0, -1_000_000.0, float("inf"), float("nan")])
 def test_capital_rejects_non_positive_and_non_finite(bad_capital: float) -> None:
     with pytest.raises(ValidationError):
@@ -89,6 +94,11 @@ def test_buy_or_sell_period_requires_strictly_positive_notional() -> None:
 def test_hold_period_may_carry_zero_notional() -> None:
     request = EvalRequest(**_kwargs(trade_side=["hold", "hold", "hold"], position_notional=[0.0, 0.0, 0.0]))  # type: ignore[arg-type]
     assert list(request.position_notional) == [0.0, 0.0, 0.0]
+
+
+def test_hold_period_rejects_negative_notional() -> None:
+    with pytest.raises(ValidationError, match="position_notional must be non-negative"):
+        EvalRequest(**_kwargs(trade_side=["hold", "hold", "hold"], position_notional=[0.0, -1.0, 0.0]))  # type: ignore[arg-type]
 
 
 def test_missing_required_field_is_a_distinct_validation_path() -> None:

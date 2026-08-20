@@ -1,6 +1,7 @@
 """Layer 4b validation gate evaluating fold validity and point-in-time constraints."""
 
 import math
+from itertools import pairwise
 from typing import Literal
 
 import numpy as np
@@ -45,6 +46,8 @@ def run_gate(request: EvalRequest, splitter: PurgedWalkForward) -> GateVerdict:
 
     if max(request.timestamps) > request.as_of:
         reasons.append("timestamps_exceed_as_of")
+    if any(current <= previous for previous, current in pairwise(request.timestamps)):
+        reasons.append("timestamps_not_strictly_increasing")
 
     returns_arr = np.asarray(request.returns, dtype=np.float64)
     try:

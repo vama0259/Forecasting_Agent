@@ -34,7 +34,10 @@ def cost_adjusted_period_returns(
     period_returns = np.empty(n, dtype=np.float64)
     for i in range(n):
         slip_rate = float(slippage_rates[i]) if slippage_rates is not None and i < len(slippage_rates) else 0.0
-        effective_return = returns[i] - slip_rate if trade_side[i] == "buy" else returns[i]
+        exposure_sign = 1.0 if trade_side[i] == "buy" else -1.0 if trade_side[i] == "sell" else 0.0
+        effective_return = exposure_sign * returns[i]
+        if exposure_sign != 0.0:
+            effective_return -= slip_rate
         fee = schedule.total_fee(float(position_notional[i]), trade_side[i], segment, timestamps[i])
         period_returns[i] = (effective_return * position_notional[i] - fee) / capital
     return period_returns

@@ -26,6 +26,8 @@ class EvalRequest(BaseModel):
     def _validate_lengths_and_notionals(self) -> "EvalRequest":
         """Takes self; returns self after validating sequence lengths and trade side notionals."""
         n = len(self.returns)
+        if n == 0:
+            raise ValueError("returns must not be empty")
         mismatched: dict[str, int] = {}
         for field_name in ("forecasts", "calls", "timestamps", "position_notional", "trade_side"):
             val: Sequence[object] = getattr(self, field_name)
@@ -36,6 +38,8 @@ class EvalRequest(BaseModel):
             raise ValueError(f"length mismatch against returns (n={n}): {{{details}}}")
 
         for i, (side, notional) in enumerate(zip(self.trade_side, self.position_notional, strict=True)):
+            if notional < 0.0:
+                raise ValueError(f"index {i}: position_notional must be non-negative, got {notional}")
             if side in ("buy", "sell") and notional <= 0.0:
                 msg = f"index {i}: {side} trade requires strictly positive position_notional, got {notional}"
                 raise ValueError(msg)

@@ -17,13 +17,15 @@ const EXPECTED_SKILLS = [
   'fii-derivative-positioning',
   'dii-sip-resilience',
   'option-chain-pcr-skew',
+  'macro-rates-monitor',
+  'option-vol-analysis',
 ] as const;
 
 describe('Pre-Built Quantitative Skills Catalog', () => {
   const registry = new SkillRegistry();
   const downloader = new SkillDownloader();
 
-  it('discovers all 4 Indian quantitative skills from skills/ directory', async () => {
+  it('discovers all quantitative skills from skills/ directory', async () => {
     const discovered = await registry.discover('2026-12-31', ROOT_SKILLS_DIR);
     const discoveredNames = discovered.map((s) => s.manifest.name).sort();
 
@@ -78,22 +80,33 @@ describe('Pre-Built Quantitative Skills Catalog', () => {
     const diiConfig = AGENT_CONFIGS.find((c) => c.name === 'dii')!;
     const retailConfig = AGENT_CONFIGS.find((c) => c.name === 'retail')!;
 
-    expect(priceConfig.skills).toEqual(['wyckoff-volume-spread']);
-    expect(fiiConfig.skills).toEqual(['fii-derivative-positioning', 'option-chain-pcr-skew']);
+    expect(priceConfig.skills).toEqual(['wyckoff-volume-spread', 'macro-rates-monitor']);
+    expect(fiiConfig.skills).toEqual([
+      'fii-derivative-positioning',
+      'option-chain-pcr-skew',
+      'macro-rates-monitor',
+      'option-vol-analysis',
+    ]);
     expect(diiConfig.skills).toEqual(['dii-sip-resilience']);
-    expect(retailConfig.skills).toEqual(['wyckoff-volume-spread', 'option-chain-pcr-skew']);
+    expect(retailConfig.skills).toEqual(['wyckoff-volume-spread', 'option-chain-pcr-skew', 'option-vol-analysis']);
 
     const priceSkills = await registry.resolveForAgent(priceConfig, '2026-12-31', ROOT_SKILLS_DIR);
-    expect(priceSkills.map((s) => s.manifest.name)).toEqual(['wyckoff-volume-spread']);
+    expect(priceSkills.map((s) => s.manifest.name).sort()).toEqual(
+      ['wyckoff-volume-spread', 'macro-rates-monitor'].sort(),
+    );
 
     const fiiSkills = await registry.resolveForAgent(fiiConfig, '2026-12-31', ROOT_SKILLS_DIR);
-    expect(fiiSkills.map((s) => s.manifest.name)).toEqual(['fii-derivative-positioning', 'option-chain-pcr-skew']);
+    expect(fiiSkills.map((s) => s.manifest.name).sort()).toEqual(
+      ['fii-derivative-positioning', 'option-chain-pcr-skew', 'macro-rates-monitor', 'option-vol-analysis'].sort(),
+    );
 
     const diiSkills = await registry.resolveForAgent(diiConfig, '2026-12-31', ROOT_SKILLS_DIR);
     expect(diiSkills.map((s) => s.manifest.name)).toEqual(['dii-sip-resilience']);
 
     const retailSkills = await registry.resolveForAgent(retailConfig, '2026-12-31', ROOT_SKILLS_DIR);
-    expect(retailSkills.map((s) => s.manifest.name)).toEqual(['wyckoff-volume-spread', 'option-chain-pcr-skew']);
+    expect(retailSkills.map((s) => s.manifest.name).sort()).toEqual(
+      ['wyckoff-volume-spread', 'option-chain-pcr-skew', 'option-vol-analysis'].sort(),
+    );
   });
 
   it('point-in-time as_of gate filters skills before available_from date', async () => {
@@ -101,7 +114,7 @@ describe('Pre-Built Quantitative Skills Catalog', () => {
     expect(beforeRelease).toHaveLength(0);
 
     const onRelease = await registry.discover('2026-01-01', ROOT_SKILLS_DIR);
-    expect(onRelease).toHaveLength(4);
+    expect(onRelease).toHaveLength(EXPECTED_SKILLS.length);
   });
 });
 
