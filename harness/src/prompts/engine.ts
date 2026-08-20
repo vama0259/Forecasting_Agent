@@ -2,6 +2,8 @@ import nunjucks from 'nunjucks';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import type { ParticipantAgentConfig } from '../agents/types.js';
+import type { SkillPackage } from '../skills/types.js';
+import { renderSkillsBlock } from '../skills/injector.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -38,7 +40,11 @@ export interface PromptContext {
   [key: string]: unknown;
 }
 
-export function renderPrompt(config: ParticipantAgentConfig, context: PromptContext): string {
+export function renderPrompt(
+  config: ParticipantAgentConfig,
+  context: PromptContext,
+  skills: SkillPackage[] = [],
+): string {
   // 750 calendar days (~536 trading bars), not 120 (~85 bars). At 120 the agents fit 13 features
   // across 5 models on ~45 training rows -- ~3.5 rows per feature, deep in overfitting territory,
   // and measurably so: the trivial `drift` baseline's Brier improves 0.269 -> 0.241 (from worse
@@ -48,9 +54,13 @@ export function renderPrompt(config: ParticipantAgentConfig, context: PromptCont
     context.start_date ||
     new Date(new Date(context.as_of).getTime() - 750 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+  const { block: skillsBlock } = renderSkillsBlock(skills);
+  const skills_block = (context.skills_block as string | undefined) ?? (skillsBlock || '');
+
   return env.render(config.promptTemplate, {
     horizon_days: context.horizon_days ?? config.horizon_days,
     ...context,
+    skills_block,
     start_date,
     agent_name: config.name,
     role_title: config.roleTitle,

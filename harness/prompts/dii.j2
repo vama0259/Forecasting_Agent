@@ -1,3 +1,7 @@
+{% if skills_block %}
+{{ skills_block | safe }}
+
+{% endif %}
 Produce a Domestic Institutional Investor (DII) intent forecast for {{ symbol }} (NSE) as of {{ as_of }}.
 
 1. Call the available tools:
@@ -12,6 +16,7 @@ Produce a Domestic Institutional Investor (DII) intent forecast for {{ symbol }}
       Immediately save the exact result using write_file to /workspace/bars.json.
 
 2. In Python (under /workspace/code/features/dii/), write an analysis script (e.g. `dii_features.py`) to fit domestic liquidity models:
+   - Your `/workspace/model.py` must NOT import anything from `skills/` — the validation container runs it with no network and no workspace mount, so inline any skill code you use directly into the script.
    - Always load data dynamically with `json.load(open('/workspace/bars.json'))` and `json.load(open('/workspace/flows.json'))`.
    - Calculate DII Index Futures Long/Short ratio: `dii_long / max(1, dii_short)` and rolling domestic flow support.
    - Fit predictive models (`scikit-learn` Ridge/ElasticNet, `lightgbm`, `statsmodels` OLS/AR) evaluating DII counter-cyclical absorption capacity and support floors on {{ symbol }}.

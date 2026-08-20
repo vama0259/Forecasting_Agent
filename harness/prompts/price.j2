@@ -1,4 +1,8 @@
 {% import "_macros.j2" as macros %}
+{% if skills_block %}
+{{ skills_block | safe }}
+
+{% endif %}
 Produce a price-direction forecast for {{ symbol }} (NSE) as of {{ as_of }}.
 
 1. Call the market data tool: fetch_ohlcv(symbol="{{ symbol }}", market="NSE", start="{{ start_date }}", end="{{ as_of }}", as_of="{{ as_of }}").
@@ -9,6 +13,7 @@ Produce a price-direction forecast for {{ symbol }} (NSE) as of {{ as_of }}.
    `json.load(open('/workspace/bars.json'))`.
 
 2. In Python (under {{ workspace_path }}), compute quantitative features and train an ML/econometric forecasting model:
+   - Your `/workspace/model.py` must NOT import anything from `skills/` — the validation container runs it with no network and no workspace mount, so inline any skill code you use directly into the script.
    - Always load data dynamically with `json.load(open('/workspace/bars.json'))`.
    - Engineer feature signals: lagged log returns (1d, 3d, 5d, 10d), rolling realized volatility, RSI/MFI momentum, volume ratios, and Kalman-filtered trend (`filterpy`, `scipy`).
    - Fit predictive models using installed ML/econometric libraries (`lightgbm`, `catboost`, `scikit-learn`, `statsmodels` AutoReg/ARIMA, `arch` GARCH).

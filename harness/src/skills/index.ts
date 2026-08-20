@@ -3,3 +3,4 @@
 export * from './types.js';
 export * from './registry.js';
 export * from './downloader.js';
+export * from './injector.js';

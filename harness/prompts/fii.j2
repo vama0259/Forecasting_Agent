@@ -1,3 +1,7 @@
+{% if skills_block %}
+{{ skills_block | safe }}
+
+{% endif %}
 Produce a Foreign Institutional Investor (FII) intent forecast for {{ symbol }} (NSE) as of {{ as_of }}.
 
 1. Call the available tools:
@@ -13,6 +17,7 @@ Produce a Foreign Institutional Investor (FII) intent forecast for {{ symbol }} 
       Immediately save the exact result using write_file to /workspace/bars.json.
 
 2. In Python (under /workspace/code/features/fii/), write an analysis script (e.g. `fii_features.py`) to fit quantitative flow & regime models:
+   - Your `/workspace/model.py` must NOT import anything from `skills/` — the validation container runs it with no network and no workspace mount, so inline any skill code you use directly into the script.
    - Always load data dynamically with `json.load(open('/workspace/bars.json'))` and `json.load(open('/workspace/flows.json'))`.
    - Calculate FII Index Futures Long/Short ratio: `fii_long / max(1, fii_short)` and rolling 5d/10d change in net positioning.
    - Fit ML/econometric classification or regression models (`scikit-learn`, `catboost`, `lightgbm`, `statsmodels`) combining market-wide FII positioning with {{ symbol }}'s relative strength and beta.

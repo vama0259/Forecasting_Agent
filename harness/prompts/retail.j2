@@ -1,3 +1,7 @@
+{% if skills_block %}
+{{ skills_block | safe }}
+
+{% endif %}
 Produce a Retail & Microstructure intent forecast for {{ symbol }} (NSE) as of {{ as_of }}.
 
 1. Call the microstructure & derivatives tools:
@@ -15,6 +19,7 @@ Produce a Retail & Microstructure intent forecast for {{ symbol }} (NSE) as of {
       option_chain.json.
 
 2. In Python (under /workspace/code/features/retail/), write an analysis script (e.g. `retail_features.py`) to fit microstructure models:
+   - Your `/workspace/model.py` must NOT import anything from `skills/` — the validation container runs it with no network and no workspace mount, so inline any skill code you use directly into the script.
    - Always load data dynamically with `json.load(open('/workspace/bars.json'))`, `json.load(open('/workspace/microstructure.json'))`, and `json.load(open('/workspace/option_chain.json'))`.
    - Extract delivery percentage: `deliverable_quantity / max(1, quantity_traded) * 100` and Put-Call Ratio (PCR): `total_put_oi / max(1, total_call_oi)`.
    - Fit ML classifiers (`catboost`, `lightgbm`, `scikit-learn` RandomForest/LogisticRegression) or empirical Markov models conditioning on volume exhaustion, delivery spikes, and retail sentiment froth.

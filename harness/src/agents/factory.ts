@@ -10,6 +10,8 @@ import type { ParticipantAgentConfig } from './types.js';
 import type { HarnessConfig } from '../config.js';
 import type { CompositeBackend } from 'deepagents';
 import type { TraceHandle } from '../tracing/langfuse.js';
+import { SkillRegistry } from '../skills/registry.js';
+import type { SkillPackage } from '../skills/types.js';
 
 import type { z } from 'zod';
 
@@ -20,6 +22,19 @@ export interface BuildParticipantAgentParams {
   backend: CompositeBackend;
   trace?: TraceHandle | undefined;
   schema?: z.ZodTypeAny | undefined;
+  skills?: SkillPackage[] | undefined;
+}
+
+// Resolves registered skills for a participant agent configuration based on point-in-time as_of date.
+export async function resolveAgentSkills(
+  config: ParticipantAgentConfig,
+  asOf: string,
+  registry: SkillRegistry = new SkillRegistry(),
+): Promise<SkillPackage[]> {
+  if (!config.skills || config.skills.length === 0) {
+    return [];
+  }
+  return registry.resolveForAgent(config, asOf);
 }
 
 // Wraps a sentiment StructuredTool to ensure any runtime failure returns a degraded neutral fallback.
