@@ -364,8 +364,17 @@ it('installs downloaded skills as draft regardless of declared status', async ()
 > exhaustive and do not describe it as a security control in comments — spec §1.4 explains why it
 > is a lint.
 >
-> `download(source, targetDir)`: `source` may be a local tarball path, a local directory, or a git
-> URL (`git clone --depth 1` into a temp dir). Unpack to a temp dir, run the hard checks, run the
+> `download(source, targetDir)`: `source` may be a local **directory**, a local tarball path, or a
+> git URL (`git clone --depth 1` into a temp dir).
+>
+> **On tar:** the harness has no tar dependency and Node has no built-in one. Do NOT shell out to
+> `/usr/bin/tar` to extract and then inspect — that extracts an untrusted archive to disk *before*
+> the hard checks can run, which is the exact ordering the checks exist to prevent. Two acceptable
+> orders: (a) `tar -tvf` to LIST first, run `assertArchiveSafe` on the listing, then extract; or
+> (b) add the `tar` npm package and use its `filter` hook to reject entries during extraction. Pick
+> (a) unless it proves awkward — it adds no dependency. Either way the check must precede the write.
+>
+> Unpack to a temp dir, run the hard checks, run the
 > lint, parse via the Task 1 schema, **force `status: 'draft'` and stamp `available_from` to today
 > regardless of what the manifest declares**, then move into `targetDir`. Clean up the temp dir on
 > every path including failure.
@@ -465,8 +474,10 @@ it('warns the agent that model.py must inline skills code', () => {
 > `pnpm --prefix harness test` and report exact output. Do not commit.
 
 **Validator brief:**
-1. Cold-shell full harness suite — 283 baseline plus new, no regressions. Prompt-snapshot tests are
-   the likely breakage; confirm any snapshot update is intentional and reviewed, not blanket `-u`.
+1. Cold-shell full harness suite — 283 baseline plus new, no regressions. *(Checked: there are no
+   snapshot tests in this repo — `grep -rln toMatchSnapshot harness/tests` is empty and there is no
+   `__snapshots__` directory — so template edits cannot silently pass via a blanket `-u`. The real
+   breakage risk is any existing test asserting on rendered prompt content.)*
 2. **Measure the 6,000-char cap for real** — render a deliberately oversized skill set and
    `console.log(block.length)`. Do not accept "should be under 6000."
 3. **Determinism against the real filesystem**: run `discover()` twice on a directory whose entries
@@ -483,8 +494,26 @@ it('warns the agent that model.py must inline skills code', () => {
 
 **Files:** create `skills/wyckoff-volume-spread/{SKILL.md,script.py}`,
 `skills/fii-derivative-positioning/{SKILL.md,script.py}`, `skills/dii-sip-resilience/SKILL.md`,
-`skills/option-chain-pcr-skew/SKILL.md`; modify `harness/src/agents/types.ts`; create
-`harness/tests/skills/catalog.test.ts` and `harness/scripts/skill-responsiveness.ts`.
+`skills/option-chain-pcr-skew/SKILL.md`; modify `harness/src/agents/types.ts`,
+`harness/tsconfig.json`; create `harness/tests/skills/catalog.test.ts` and
+`harness/scripts/skill-responsiveness.ts`.
+
+**⚠️ `harness/tsconfig.json` must be widened as part of this task, and this is not incidental.**
+`include` is currently `["src/**/*.ts", "tests/**/*.ts"]` — **`scripts/` is excluded from
+typecheck.** That exact gap produced PR #42: `run-real-pipeline.ts` read
+`config.search.daily_quota_cap` when the real Zod field is `daily_cap`, a one-second compile error
+that was invisible to every gate CI runs, including two green `pnpm typecheck` runs, and it crashed
+the first real invocation of merged #21 code. Putting M11's comprehension gate in `scripts/` walks
+straight back into it — the one file whose correctness the whole milestone's premise rests on would
+be the one file `tsc` never reads.
+
+Add `"scripts/**/*.ts"` to `include`. Expect this to surface pre-existing errors in the five
+scripts already there (`run-real-pipeline.ts`, `run-real-debate.ts`, `run-real-multi-pipeline.ts`,
+`check-debate-db.ts`, `compare-baselines.ts`, `view-agent-scripts.ts`). **Fix them or the task is
+not done** — a widened `include` with a red typecheck is worse than the status quo, because the
+next person turns it off. If the count is large enough to be its own story, stop and say so rather
+than silently reverting the include. The Kanban already lists "decide `scripts/`'s tsconfig status"
+as an open item; this is where it gets decided.
 
 **Seam note.** Revision 1's catalog test asserted only that the four skills parse and match agent
 assignments — an assertion that passes byte-identically whether `SKILL.md` contains Wyckoff analysis
