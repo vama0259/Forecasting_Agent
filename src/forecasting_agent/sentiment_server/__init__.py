@@ -7,6 +7,7 @@ from forecasting_agent.sentiment_server.aggregator import (
     aggregate_sentiment,
 )
 from forecasting_agent.sentiment_server.scorer import FinBERTScorer
+from forecasting_agent.sentiment_server.server import health, mcp, score_sentiment
 
 __all__ = [
     "FinBERTScorer",
@@ -14,4 +15,7 @@ __all__ = [
     "HeadlineScore",
     "SentimentResult",
     "aggregate_sentiment",
+    "health",
+    "mcp",
+    "score_sentiment",
 ]
