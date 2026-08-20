@@ -22,10 +22,21 @@ participant agents — on a workspace substrate that actually exists.
 
 ## ⚠️ Honesty note on the red-test steps
 
-The failing-test code below is **paste-ready but has not been executed** — the modules under test
-do not exist yet, so there is no run to watch. Each task states the **expected** failure mode.
-Step 2 of every task is where the red is actually watched, by the implementer, before writing any
-production code. Do not record a task as complete on the strength of this document's prediction.
+The test code below is a **sketch, not paste-ready, and has not been executed.** Two specific gaps,
+named rather than glossed:
+
+1. **It has not been run.** The modules under test do not exist yet, so there is no red to watch.
+   Each task states the *expected* failure mode — a prediction, not an observation. Step 1 of every
+   task is where the implementer writes the real tests; Step 2 is where the red is actually watched,
+   before any production code. Do not record a task complete on this document's prediction.
+2. **Roughly fifteen helpers are referenced but not defined** — `fm()`, `fixtureDir()`, `makeTar()`,
+   `makeTarWithSymlink()`, `runCli()`, `entry()`, `makeSkill()`, `priceConfig`, `ctx`, `wyckoff`,
+   `skillA`/`skillB`, `target`, `TODAY`, `importingModel`. Writing them is part of Step 1, not an
+   oversight to route around. Where a sketch asserts on a fixture it never creates (Task 5's
+   skill `'x'`), the implementer creates it.
+
+The sketches fix the *assertions* — what must be true — not the scaffolding. That is deliberate:
+the assertions are the part a delegated implementer must not quietly weaken.
 
 ---
 
@@ -54,7 +65,11 @@ container can see, and every one of its unit tests passes anyway.
 
 **Files:** create `harness/src/sandbox/workspace.ts`, `harness/tests/sandbox/workspace.test.ts`;
 modify `harness/src/sandbox/deepagents-adapter.ts`, `harness/src/pipeline/multi-agent.ts`,
-`harness/src/pipeline/single-agent.ts`, `harness/src/sandbox/manager.ts`.
+`harness/src/pipeline/single-agent.ts`, `harness/src/sandbox/manager.ts`, `.gitignore`.
+
+`.gitignore` gains `.workspaces/` — the workspace root this task creates holds per-run state that
+must never be committed, and without the entry the first real run makes `git status` noisy enough
+that step 5 of this task's own validator brief stops being usable.
 
 **Seam note.** The seam is `ExecutionRequest.workspacePath` (`sandbox/types.ts:11`), which already
 exists and is already honoured by `getOrCreateWarmContainer`. Nothing about the mount mechanism
@@ -210,12 +225,18 @@ it('defaults status to draft, never active', async () => {
   expect(pkg.manifest.status).toBe('draft');
 });
 
-it('rejects a hyphenated skill that ships a script.py', async () => {
+it('normalizes kebab-case names to snake_case when syncing script.py', async () => {
   const dir = await fixtureDir({
     'has-hyphen/SKILL.md': fm({ name: 'has-hyphen', available_from: '2026-01-01' }),
     'has-hyphen/script.py': 'X = 1',
   });
-  await expect(new SkillRegistry().discover('2026-06-01', dir)).rejects.toThrow(/not a valid Python module name/i);
+  const [pkg] = await new SkillRegistry().discover('2026-06-01', dir);
+  expect(pkg.moduleName).toBe('has_hyphen');
+
+  const ws = await mkdtemp(join(tmpdir(), 'ws-'));
+  await mkdir(join(ws, 'skills'), { recursive: true });
+  const written = await new SkillRegistry().syncToSandbox([pkg], ws);
+  expect(written).toEqual([join(ws, 'skills', 'has_hyphen.py')]);   // NOT has-hyphen.py
 });
 
 it('resolveForAgent uses config.skills and ignores target_agents', async () => {
@@ -249,8 +270,9 @@ it('resolveForAgent uses config.skills and ignores target_agents', async () => {
 >   dependency), validate against the schema, and **exclude any package whose `available_from` is
 >   lexicographically greater than `asOf`** (ISO dates compare correctly as strings). Log each
 >   exclusion. Cache results per (dir, asOf) — the registry is read once per run.
-> - Throw a clear error containing "not a valid Python module name" if a package contains a
->   `script.py` and its `name` contains a hyphen.
+> - Set `SkillPackage.moduleName = manifest.name.replaceAll('-', '_')`. Do NOT reject hyphenated
+>   names — kebab-case is the convention and every catalog skill uses it; `-` is simply illegal in a
+>   Python identifier, so the name is normalized on the way to disk, not refused.
 > - `getSkill(name, asOf)`, `resolveForAgent(config, asOf, skillsDir?)` — the latter returns only
 >   skills named in `config.skills`, in `config.skills` order, skipping (with a warning) any that
 >   are missing, archived, or filtered out by `asOf`. `target_agents` must NOT affect the result.
@@ -462,13 +484,14 @@ it('warns the agent that model.py must inline skills code', () => {
 **Files:** create `skills/wyckoff-volume-spread/{SKILL.md,script.py}`,
 `skills/fii-derivative-positioning/{SKILL.md,script.py}`, `skills/dii-sip-resilience/SKILL.md`,
 `skills/option-chain-pcr-skew/SKILL.md`; modify `harness/src/agents/types.ts`; create
-`harness/tests/skills/catalog.test.ts` and `harness/tests/skills/responsiveness.test.ts`.
+`harness/tests/skills/catalog.test.ts` and `harness/scripts/skill-responsiveness.ts`.
 
 **Seam note.** Revision 1's catalog test asserted only that the four skills parse and match agent
 assignments — an assertion that passes byte-identically whether `SKILL.md` contains Wyckoff analysis
-or lorem ipsum. **That test is kept, but it is explicitly not the gate.** The gate is
-`responsiveness.test.ts`, which is separated into its own file precisely so that nobody reads a
-green `catalog.test.ts` as evidence that skills work.
+or lorem ipsum. **That test is kept, but it is explicitly not the gate.** The gate lives outside the
+suite entirely, in `harness/scripts/skill-responsiveness.ts`, precisely so that nobody reads a green
+`catalog.test.ts` as evidence that skills work — a file in `scripts/` cannot be mistaken for CI
+coverage the way a `.test.ts` file can.
 
 **Failing test (a) — schema conformance, the weak check** — `catalog.test.ts`:
 
@@ -482,28 +505,35 @@ it.each(['wyckoff-volume-spread', 'fii-derivative-positioning', 'dii-sip-resilie
   });
 ```
 
-**Failing test (b) — THE COMPREHENSION GATE** — `responsiveness.test.ts`:
+**(b) THE COMPREHENSION GATE — a live script, not a test.** `harness/scripts/skill-responsiveness.ts`.
+
+Checked before writing this: `grep -rln "nock\|msw\|recorded\|vcr\|replay\|FakeListChatModel"
+harness/tests` returns **nothing**, and `harness/tests/e2e/single-agent.test.ts` mocks the agent
+object outright. There is no replay infrastructure to record a turn against, and a fake model that
+echoes its prompt would make this assertion trivially true while proving nothing — a fake gate is
+worse than none. So this is a **manual live run**, matching how every other real-behaviour claim in
+this repo has been verified (real NSE, real Docker, real Angel One, real pipeline).
 
 ```typescript
-// Spec §5.1(b). If this file is skipped or deleted, M11's premise is untested -- say so out loud
-// rather than letting catalog.test.ts stand in for it.
-it('agent output MOVES when the skill body changes', async () => {
-  const base = await runRecordedPriceTurn({ skills: [] });
-  const withSkill = await runRecordedPriceTurn({ skills: ['wyckoff-volume-spread'] });
-  expect(withSkill.signal).not.toEqual(base.signal);
-
-  const inverted = await runRecordedPriceTurn({
-    skills: ['wyckoff-volume-spread'],
-    mutate: (body) => body.replace('absorption', 'distribution').replace('bullish', 'bearish'),
-  });
-  expect(inverted.signal.direction).not.toBe(withSkill.signal.direction);
-});
+// harness/scripts/skill-responsiveness.ts -- run by hand, costs real tokens, NOT in CI.
+//   pnpm --prefix harness exec tsx scripts/skill-responsiveness.ts --symbol TCS.NS --as-of 2026-08-19
+// Prints three AgentSignals. A human reads them; there is no equality assertion, because a real
+// LLM is not deterministic and one would flake.
+const base     = await runPriceTurn({ skills: [] });
+const withSkill = await runPriceTurn({ skills: ['wyckoff-volume-spread'] });
+const inverted  = await runPriceTurn({ skills: ['wyckoff-volume-spread'],
+                    mutate: (b) => b.replaceAll('absorption', 'distribution').replaceAll('bullish', 'bearish') });
+printComparison({ base, withSkill, inverted });   // direction, probability, confidence, evidence count
 ```
 
-**Expected red:** both files fail on missing `skills/` fixtures; `responsiveness.test.ts`
-additionally fails on `runRecordedPriceTurn` not existing.
+**What the operator must confirm, and record:** run 2 differs from run 1, and run 3 differs from
+run 2 in the direction the inverted rule implies. Three identical signals means the injector is
+decorative regardless of a green suite. Paste all three into the session and the Daily note.
 
-**Run:** `pnpm --prefix harness test tests/skills/catalog.test.ts tests/skills/responsiveness.test.ts`
+**Expected red:** `catalog.test.ts` fails on missing `skills/` fixtures. The responsiveness script
+is not a test and has no red state — it is run once, by hand, after Task 4's catalog exists.
+
+**Run:** `pnpm --prefix harness test tests/skills/catalog.test.ts`, then the script above by hand.
 
 **Gemini delegation prompt:**
 
@@ -517,19 +547,21 @@ additionally fails on `runRecordedPriceTurn` not existing.
 >    `wyckoff-volume-spread` and `fii-derivative-positioning` additionally get a `script.py` that
 >    parses the NSE data shape described in spec §2 — pure functions taking a parsed payload and
 >    returning a DataFrame or dict; no I/O, no network, no `subprocess`.
->    NOTE: `script.py` requires a hyphen-free module name per spec §3.2, so name the files so that
->    `SkillRegistry` writes them as importable modules — check what Task 1's registry does with
->    hyphens and follow it; do not work around the check.
+>    Keep the directory names kebab-case as listed — Task 1's registry normalizes `-` to `_` when
+>    it syncs `script.py`, so `wyckoff-volume-spread` becomes `skills.wyckoff_volume_spread`. Do not
+>    rename anything to work around this.
 > 2. In `harness/src/agents/types.ts` `AGENT_CONFIGS`, set:
 >    `price.skills = ['wyckoff-volume-spread']`,
 >    `fii.skills = ['fii-derivative-positioning', 'option-chain-pcr-skew']`,
 >    `dii.skills = ['dii-sip-resilience']`,
 >    `retail.skills = ['wyckoff-volume-spread', 'option-chain-pcr-skew']`.
-> 3. Implement the `runRecordedPriceTurn` helper the responsiveness test needs, in
->    `harness/tests/helpers/recorded-turn.ts`. If no recorded-LLM fixture infrastructure exists in
->    this repo, DO NOT fake it and DO NOT stub the assertion into passing — instead report back
->    exactly what is missing and leave the test failing. A falsely-passing responsiveness test is
->    worse than an absent one.
+> 3. Write `harness/scripts/skill-responsiveness.ts` as sketched in the plan — a manual CLI script
+>    taking `--symbol` and `--as-of`, running the `price` agent three times against the REAL LLM
+>    (no skill / with skill / with a mutated skill body), and printing the three `AgentSignal`s in a
+>    comparison table. It is NOT a vitest file and must NOT be added to the suite: it costs real
+>    tokens and a real LLM is not deterministic, so an equality assertion would flake. Do not run it
+>    yourself. Do not invent a fake or echo model to make it deterministic — that would produce a
+>    gate that always passes and proves nothing.
 >
 > Run `pnpm --prefix harness test tests/skills/` and report exact output, including which tests
 > still fail and why. Do not commit.
@@ -539,13 +571,14 @@ additionally fails on `runRecordedPriceTurn` not existing.
    rules, not generic prose that would satisfy the schema while teaching the agent nothing. This is
    a human-judgement check; no test substitutes for it.
 2. Cold-shell re-run of the full suite.
-3. **Run the comprehension check by hand and record the before/after values**: render the `price`
-   prompt with and without `wyckoff-volume-spread`; then execute the responsiveness test and paste
-   the two `AgentSignal` outputs into the session. State the plain-language question to the user:
-   *"if the skill body changes, should the forecast move?"*
-4. **If `runRecordedPriceTurn` could not be built** — do not paper over it. Record in the spec's
-   §5.1 and in the Daily note that M11's core premise ships untested, and treat that as an open
-   item, not a completed task.
+3. **Run the comprehension check by hand and record all three values.** Execute
+   `harness/scripts/skill-responsiveness.ts` against the real LLM and paste the three `AgentSignal`
+   outputs into the session and the Daily note. State the plain-language question to the user:
+   *"if the skill body changes, should the forecast move?"* — and let them read the three signals
+   and answer it themselves. Three identical signals is a **failed task**, not a curiosity.
+4. **Confirm the script was not turned into a test.** `grep -rn "skill-responsiveness" harness/tests`
+   must be empty, and no fake/echo model may have been introduced to make it deterministic — that
+   would produce a gate that always passes. If Gemini built one, delete it and re-run step 3.
 5. Confirm each skill body is under 5,500 chars: `wc -c skills/*/SKILL.md`.
 6. `git status` — the `skills/` directory is new; confirm nothing else appeared.
 

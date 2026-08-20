@@ -316,7 +316,7 @@ harness/src/cli/
 
 ```typescript
 export const SkillManifestSchema = z.object({
-  name: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),        // no underscores: becomes a Python module name
+  name: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),        // kebab-case; normalized to snake_case for Python
   description: z.string().min(10),
   version: z.string().default('1.0.0'),
   // Point-in-time gate (ADR-020/021). Required -- a default would silently disable the filter.
@@ -333,15 +333,19 @@ export interface SkillPackage {
   instructions: string;      // SKILL.md body below the frontmatter
   scriptPath?: string;       // absolute host path to script.py, if present
   examples: string[];
+  moduleName: string;        // manifest.name with '-' -> '_'; the Python import path for scriptPath
   lintWarnings: string[];    // soft findings from 1.4; never blocks
   contentHash: string;       // sha256 over SKILL.md + script.py, for .skills.lock.json
 }
 ```
 
-`name` rejects underscores because a Tier-2 skill becomes `/workspace/skills/<name>.py` and is
-imported as `skills.<name>`; `-` is not a legal Python identifier, so Tier-2 skills additionally
-must have hyphen-free names — the registry rejects a `script.py` under a hyphenated name with an
-explicit message rather than producing an unimportable module.
+**Name normalization, not rejection.** Skill names are kebab-case by convention (`wyckoff-volume-spread`),
+but `-` is not legal in a Python identifier, so a Tier-2 skill cannot be written to disk under its
+own name. `syncToSandbox` therefore writes `/workspace/skills/<name with - replaced by _>.py`, and
+the skill is imported as `skills.wyckoff_volume_spread`. Rejecting hyphenated names instead would
+make the catalog in §2 unbuildable — both Tier-2 skills there are kebab-case, as every skill is.
+`SkillPackage` exposes the derived name as `moduleName` so the injector can tell the agent the exact
+import path rather than leaving it to guess the transform.
 
 ### 3.3 Key signatures
 
@@ -352,7 +356,7 @@ prepare(runId: string, asOf: string): Promise<string>;      // returns host path
 // SkillRegistry
 discover(asOf: string, skillsDir?: string): Promise<SkillPackage[]>;   // asOf REQUIRED (1.3)
 getSkill(name: string, asOf: string): Promise<SkillPackage | null>;
-resolveForAgent(config: ParticipantAgentConfig, asOf: string): Promise<SkillPackage[]>;
+resolveForAgent(config: ParticipantAgentConfig, asOf: string, skillsDir?: string): Promise<SkillPackage[]>;
 syncToSandbox(skills: SkillPackage[], workspacePath: string): Promise<string[]>;  // writes skills/ + __init__.py
 
 // SkillDownloader
@@ -389,7 +393,8 @@ forecasting-agent skills archive <name>        # -> archived, excluded from inje
 2. **Future-dated skill** — `available_from > as_of` excludes the skill silently-but-logged; the
    validity gate treats injection of one as a leakage failure (§1.3).
 3. **Budget overflow** — skill dropped whole, name logged. Never truncated (§1.5).
-4. **Hyphenated Tier-2 name** — rejected at registry load with an explicit message (§3.2).
+4. **Kebab-case Tier-2 name** — normalized to `moduleName` (`-` → `_`) on sync; the injected prompt
+   states the resulting import path so the agent never guesses the transform (§3.2).
 5. **Archive escape** — hard reject before anything touches `skills/` (§1.4).
 6. **Submitted model imports `skills.*`** — fails validation. Correct behaviour; the diagnostic
    must name the cause, since ADR-021 already warns this class of failure is "maddening to debug"
@@ -416,26 +421,53 @@ Two checks, kept separate, because one of them is much weaker than the other:
 body appears verbatim. *This proves injection happened. It would still pass with lorem ipsum, so it
 is not the comprehension gate.*
 
-**(b) Responsiveness check — the actual gate.** Run one recorded-LLM `price` agent turn twice at a
-fixed `as_of` and seed: once with `wyckoff-volume-spread`, once without. Assert the two
-`AgentSignal` outputs are **not identical** — the evidence list, probability, or reasoning must
-move. Then mutate the skill body (swap the absorption/distribution rule for its inverse) and assert
-the output moves *again*, in the direction the rule implies.
+**(b) Responsiveness check — the actual gate. It is a live run, not a test.**
+
+*Measured before writing this section:* `harness/tests/` contains **no recorded-LLM or replay
+infrastructure** — no `nock`, no `msw`, no VCR-style fixtures, no `FakeListChatModel`. The e2e
+tests mock the agent object outright (`harness/tests/e2e/single-agent.test.ts:98` and siblings),
+which means they never exercise a model at all.
+
+```
+grep -rln "nock\|msw\|recorded\|vcr\|replay\|FakeListChatModel" harness/tests   →   no matches
+```
+
+That rules out the recorded-turn approach revision 1 of this section assumed, and it rules out the
+tempting substitute: a fake model that echoes a function of its prompt would make "output moves when
+the skill changes" *trivially* true while proving nothing about a real LLM. That is a fake gate, and
+it is worse than no gate because it looks like one.
+
+**So the gate is a manual live run** — the same pattern this project already uses for every
+"verify it for real" check (real NSE fetch, real Docker daemon, real Angel One login, real pipeline
+invocation). `harness/scripts/skill-responsiveness.ts`, run by hand against the real LLM at a fixed
+`as_of`, printing three `AgentSignal` outputs side by side:
+
+| Run | Skills | Expected |
+| :--- | :--- | :--- |
+| 1 | `[]` | baseline |
+| 2 | `['wyckoff-volume-spread']` | **differs from run 1** — evidence, probability, or direction |
+| 3 | same skill, body mutated (absorption ⇄ distribution, bullish ⇄ bearish) | **differs from run 2**, in the direction the inverted rule implies |
+
+It does not run in CI: it costs real tokens and a real LLM is not deterministic, so an equality
+assertion on it would flake. It runs **once per skill-catalog change**, and its three outputs are
+pasted into the session and the Daily note. A run that produces three identical signals means the
+injector is decorative, whatever the unit tests say.
 
 Stated in plain language, for the user to answer independently: **if I change what the skill says,
-should the agent's forecast change? Run it and watch the number.** If the answer is "it didn't
-move," the injector is decorative and no amount of passing unit tests says otherwise.
+should the agent's forecast change? Run it and watch the number.**
 
-**If (b) cannot be built this milestone** — recorded-LLM fixtures for a full agent turn may not
-exist — then **the spec's premise is untested and this document must say so**, rather than letting
-check (a) stand in for it. Check (a) passing is not evidence that skills work.
+**Consequence, stated rather than buried:** M11's core premise is verified by *one manual run*, not
+by the suite. Nothing in CI will catch a regression that silently stops skills from reaching the
+model — check (a) will still pass. Building a replay harness so this can become an automated
+assertion is the natural M12 follow-up, and it is not in M11's scope.
 
 ### 5.2 Unit & integration
 
 - `workspace.test.ts` — persist/wipe: write to `skills/`, `models/`, `scratch/`; re-run `prepare()`;
   assert the first two survive and the third is empty. Assert `__init__.py` is created.
 - `registry.test.ts` — discovery, frontmatter parse, invalid-manifest rejection, **`as_of` filtering
-  (a skill with `available_from` after `as_of` must not be returned)**, hyphenated-Tier-2 rejection.
+  (a skill with `available_from` after `as_of` must not be returned)**, kebab→snake module-name
+  normalization on sync.
 - `downloader.test.ts` — archive traversal/symlink/size hard rejects; lint warnings recorded but
   **not** blocking; local search ranking.
 - `injector.test.ts` — sorted-order determinism (same input in two directory orders → identical
