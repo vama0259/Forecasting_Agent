@@ -234,4 +234,32 @@ export class PostgresStorageRepository implements StorageRepository {
   async getPublicationByRunId(runId: RunId): Promise<PublicationRecord | null> {
     return this.runRepo.getPublicationByRunId(runId);
   }
+
+  /**
+   * Retrieves every attempt recorded for a run, ordered by attempt number.
+   * Returns full RunAttemptRecord history, including abandoned attempts.
+   */
+  async getRunAttemptsForRun(runId: RunId): Promise<readonly RunAttemptRecord[]> {
+    return this.runRepo.getRunAttemptsForRun(runId);
+  }
+
+  /**
+   * Retrieves the artifact version IDs an execution declared as inputs.
+   * Returns array of ArtifactVersionId for reconstruction and lineage.
+   */
+  async getExecutionInputs(
+    executionId: string,
+  ): Promise<readonly { artifact_version_id: ArtifactVersionId }[]> {
+    return this.artifactRepo.getExecutionInputs(executionId);
+  }
+
+  /**
+   * Retrieves lineage edges where the given version is the child.
+   * Returns array of parent ArtifactVersionId and relation pairs.
+   */
+  async getArtifactEdgesForVersion(
+    childVersionId: ArtifactVersionId,
+  ): Promise<readonly { parent_version_id: ArtifactVersionId; relation: string }[]> {
+    return this.artifactRepo.getArtifactEdgesForVersion(childVersionId);
+  }
 }

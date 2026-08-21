@@ -6,6 +6,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { PostgresPool } from '../../src/adapters/postgres/postgres-pool.js';
 import {
   PostgresStorageRepository,
@@ -19,6 +21,10 @@ import {
   PostgresEvaluationRepository,
   // repo
 } from '../../src/adapters/postgres/postgres-evaluation-repo.js';
+import {
+  LocalArtifactStore,
+  // store
+} from '../../src/adapters/storage/local-artifact-store.js';
 import type {
   ArtifactVersionId,
   ContractId,
@@ -28,20 +34,28 @@ import type {
 } from '../../src/core/types/identifiers.js';
 import type { CanonicalPlan } from '../../src/core/types/execution.js';
 
+async function* singleChunk(data: Buffer): AsyncIterable<Uint8Array> {
+  yield data;
+}
+
 describe('Postgres Outcome Settlement & Evaluation Gating', () => {
+  const testDir = path.resolve(process.cwd(), 'data', 'test-outcome-settlement');
   let pool: PostgresPool;
   let storageRepo: PostgresStorageRepository;
   let outcomeRepo: PostgresOutcomeRepository;
   let evalRepo: PostgresEvaluationRepository;
+  let artifactStore: LocalArtifactStore;
   let orgId: OrganizationId;
   let pubId: PublicationId;
   let groundTruthVersionId: ArtifactVersionId;
 
   beforeAll(async () => {
+    fs.mkdirSync(testDir, { recursive: true });
     pool = new PostgresPool();
     storageRepo = new PostgresStorageRepository(pool);
     outcomeRepo = new PostgresOutcomeRepository(pool);
     evalRepo = new PostgresEvaluationRepository(pool);
+    artifactStore = new LocalArtifactStore(testDir);
 
     const org = await storageRepo.createOrganization({
       slug: `eval-test-org-${Date.now()}`,
@@ -100,6 +114,10 @@ describe('Postgres Outcome Settlement & Evaluation Gating', () => {
       plan_hash: '2'.repeat(64) as Sha256Hash,
     });
 
+    const manifestBytes = Buffer.from(JSON.stringify({ run: run.id }));
+    const manifestStaged = await artifactStore.stage(singleChunk(manifestBytes), orgId);
+    const manifestCommitted = await artifactStore.commit(manifestStaged);
+
     const manifestArtifact = await storageRepo.createArtifact({
       organization_id: orgId,
       project_id: proj.id,
@@ -112,10 +130,10 @@ describe('Postgres Outcome Settlement & Evaluation Gating', () => {
       artifact_id: manifestArtifact.id,
       version: 1,
       state: 'AVAILABLE',
-      content_sha256: '3'.repeat(64) as Sha256Hash,
-      content_bytes: 512,
+      content_sha256: manifestCommitted.content_sha256,
+      content_bytes: manifestCommitted.content_bytes,
       media_type: 'application/json',
-      storage_key: '/manifest.json',
+      storage_key: manifestCommitted.storage_key,
       available_from: new Date().toISOString(),
       retrieved_at: new Date().toISOString(),
     });
@@ -131,6 +149,10 @@ describe('Postgres Outcome Settlement & Evaluation Gating', () => {
     });
     pubId = pub.id;
 
+    const gtBytes = Buffer.from('date,actual\n2026-08-21,95\n');
+    const gtStaged = await artifactStore.stage(singleChunk(gtBytes), orgId);
+    const gtCommitted = await artifactStore.commit(gtStaged);
+
     const gtArtifact = await storageRepo.createArtifact({
       organization_id: orgId,
       project_id: proj.id,
@@ -143,10 +165,10 @@ describe('Postgres Outcome Settlement & Evaluation Gating', () => {
       artifact_id: gtArtifact.id,
       version: 1,
       state: 'AVAILABLE',
-      content_sha256: '5'.repeat(64) as Sha256Hash,
-      content_bytes: 256,
+      content_sha256: gtCommitted.content_sha256,
+      content_bytes: gtCommitted.content_bytes,
       media_type: 'text/csv',
-      storage_key: '/actuals.csv',
+      storage_key: gtCommitted.storage_key,
       available_from: new Date().toISOString(),
       retrieved_at: new Date().toISOString(),
     });
@@ -155,6 +177,9 @@ describe('Postgres Outcome Settlement & Evaluation Gating', () => {
 
   afterAll(async () => {
     await pool.close();
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
   });
 
   it('rejects evaluation when outcome is PROVISIONAL', async () => {

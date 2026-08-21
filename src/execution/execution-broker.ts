@@ -28,6 +28,7 @@ import type { ResourcePolicyDeclaration } from '../core/types/contracts.js';
 import type { ExecutionRecord } from '../core/ports/execution-repository.port.js';
 import { ExecutionTimeoutError } from '../core/errors/execution-timeout.error.js';
 import { OomKilledError } from '../core/errors/resource-limit.error.js';
+import { ExecutionCancelledError } from '../core/errors/execution-cancelled.error.js';
 
 /** Request parameters for executing an isolated container plan node. */
 export interface ExecuteNodeRequest {
@@ -55,6 +56,7 @@ export class ExecutionBroker {
   private readonly stager: ArtifactStager;
   private readonly collector: OutputCollector;
   private readonly reconciler?: StartupReconciler;
+  private readonly cancellations = new Map<ExecutionId, () => void>();
 
   /**
    * Initializes execution broker with required runtime and storage adapters.
@@ -88,6 +90,18 @@ export class ExecutionBroker {
   }
 
   /**
+   * Requests cancellation of an in-flight execution started by executeNode.
+   * Resolves once the pending cancellation signal is raised; returns false
+   * if the execution is not currently tracked as running.
+   */
+  cancel(executionId: ExecutionId): boolean {
+    const signal = this.cancellations.get(executionId);
+    if (!signal) return false;
+    signal();
+    return true;
+  }
+
+  /**
    * Executes a plan node through the complete isolated container lifecycle.
    * Returns final ExecutionRecord in terminal COMPLETED state or throws.
    */
@@ -106,6 +120,20 @@ export class ExecutionBroker {
     });
 
     let handle: RuntimeHandle | null = null;
+    let cancellationRequested = false;
+    const cancellationPromise = new Promise<never>((_, reject) => {
+      this.cancellations.set(request.executionId, () => {
+        cancellationRequested = true;
+        reject(
+          new ExecutionCancelledError('Execution cancelled by caller request', {
+            executionId: request.executionId,
+          }),
+        );
+      });
+    });
+    // Unhandled-rejection guard: the race below is the only consumer, but a
+    // cancellation requested after the race settles must not crash the process.
+    cancellationPromise.catch(() => undefined);
 
     try {
       // 2. Stage inputs
@@ -134,9 +162,12 @@ export class ExecutionBroker {
         started_at: new Date().toISOString(),
       });
 
-      // 5. Execute commands sequentially
+      // 5. Execute commands sequentially, racing each against cancellation
       for (const cmd of request.commands) {
-        const result = await this.runtime.execute(handle, cmd);
+        const result = await Promise.race([
+          this.runtime.execute(handle, cmd),
+          cancellationPromise,
+        ]);
         await this.auditSink.appendEvent({
           organization_id: request.organizationId,
           execution_id: request.executionId,
@@ -176,16 +207,58 @@ export class ExecutionBroker {
       return completed;
     } catch (err) {
       const isTimeout = err instanceof ExecutionTimeoutError;
+      const isCancelled =
+        err instanceof ExecutionCancelledError || cancellationRequested;
       const isOom = err instanceof OomKilledError;
-      const finalState = isTimeout ? 'TIMED_OUT' : 'FAILED';
+      const finalState = isTimeout ? 'TIMED_OUT' : isCancelled ? 'CANCELLED' : 'FAILED';
+      const terminationReason = isTimeout
+        ? 'TIMEOUT'
+        : isCancelled
+          ? 'CANCELLED'
+          : isOom
+            ? 'OOM'
+            : 'USER_REQUEST';
+
+      // Diagnostic evidence must be collected from the still-RUNNING container
+      // before it is terminated; a torn-down tmpfs cannot be read afterward.
+      if (handle) {
+        try {
+          await this.executionRepo.updateExecutionState(
+            request.executionId,
+            'COLLECTING',
+          );
+          await this.collector.collectDiagnostics({
+            handle,
+            organizationId: request.organizationId,
+            projectId: request.projectId,
+            executionId: request.executionId,
+            declarations: request.outputDeclarations,
+          });
+        } catch (diagErr) {
+          await this.auditSink.appendEvent({
+            organization_id: request.organizationId,
+            execution_id: request.executionId,
+            event_type: 'DIAGNOSTIC_COLLECTION_FAILED',
+            details: { error: String(diagErr) },
+          });
+        }
+        await this.runtime.terminate(handle, terminationReason);
+      }
 
       await this.executionRepo.updateExecutionState(request.executionId, finalState, {
-        failure_code: isTimeout ? 'TIMEOUT' : isOom ? 'OOM' : 'ERROR',
+        failure_code: isTimeout
+          ? 'TIMEOUT'
+          : isCancelled
+            ? 'CANCELLED'
+            : isOom
+              ? 'OOM'
+              : 'ERROR',
         failure_detail: String(err),
         ended_at: new Date().toISOString(),
       });
       throw err;
     } finally {
+      this.cancellations.delete(request.executionId);
       // 8. Cleanup runtime and staging
       if (handle) {
         await this.runtime.destroy(handle);

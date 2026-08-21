@@ -6,6 +6,7 @@
  */
 
 import type {
+  ExecutionCommandRecord,
   ExecutionOutputRecord,
   ExecutionRecord,
   ExecutionRepository,
@@ -216,5 +217,47 @@ export class PostgresExecutionRepository implements ExecutionRepository {
        WHERE state IN ('PROVISIONING', 'READY', 'RUNNING', 'COLLECTING')`,
     );
     return res.rows;
+  }
+
+  /**
+   * Retrieves all executions belonging to a run attempt, in creation order.
+   * Returns array of ExecutionRecords for reconstruction and audit.
+   */
+  async getExecutionsForAttempt(
+    runAttemptId: RunAttemptId,
+  ): Promise<readonly ExecutionRecord[]> {
+    const res = await this.pool.query<ExecutionRecord>(
+      `SELECT id, organization_id, run_attempt_id, execution_kind,
+              execution_contract_id, authorization_hash, runtime_digest,
+              platform_digest, state, cleanup_state, failure_stage,
+              failure_code, failure_detail, exit_code, cleanup_attempts,
+              provisioning_deadline::text, started_at::text, ended_at::text,
+              created_at::text
+       FROM executions
+       WHERE run_attempt_id = $1
+       ORDER BY created_at ASC`,
+      [runAttemptId],
+    );
+    return res.rows;
+  }
+
+  /**
+   * Retrieves every recorded command for an execution, ordered by sequence.
+   * Returns array of ExecutionCommandRecords for reconstruction verification.
+   */
+  async getCommandsForExecution(
+    executionId: ExecutionId,
+  ): Promise<readonly ExecutionCommandRecord[]> {
+    return this.commandRepo.getCommandsForExecution(executionId);
+  }
+
+  /**
+   * Retrieves every recorded output for an execution, in creation order.
+   * Returns array of ExecutionOutputRecords for reconstruction verification.
+   */
+  async getOutputsForExecution(
+    executionId: ExecutionId,
+  ): Promise<readonly ExecutionOutputRecord[]> {
+    return this.commandRepo.getOutputsForExecution(executionId);
   }
 }

@@ -103,4 +103,22 @@ export class PostgresOutcomeRepository implements OutcomeRepository {
     );
     return res.rows[0] ?? null;
   }
+
+  /**
+   * Retrieves every outcome version for a publication, ordered by version.
+   * Returns full OutcomeVersionRecord history for reconstruction.
+   */
+  async getAllOutcomeVersions(
+    publicationId: PublicationId,
+  ): Promise<readonly OutcomeVersionRecord[]> {
+    const res = await this.pool.query<OutcomeVersionRecord>(
+      `SELECT id, organization_id, publication_id, version, state, payload,
+              source_artifact_version_id, resolver_version, created_at::text
+       FROM outcome_versions
+       WHERE publication_id = $1
+       ORDER BY version ASC`,
+      [publicationId],
+    );
+    return res.rows;
+  }
 }

@@ -6,8 +6,8 @@
  */
 
 import type {
+  ExecutionCommandRecord,
   ExecutionOutputRecord,
-  // record
 } from '../../core/ports/execution-repository.port.js';
 import type {
   ArtifactVersionId,
@@ -63,6 +63,63 @@ export class PostgresCommandRepository {
         ],
       );
     }
+  }
+
+  /**
+   * Retrieves every recorded command for an execution, ordered by sequence.
+   * Returns array of ExecutionCommandRecords for reconstruction verification.
+   */
+  async getCommandsForExecution(
+    executionId: ExecutionId,
+  ): Promise<readonly ExecutionCommandRecord[]> {
+    const res = await this.pool.query<{
+      id: string;
+      organization_id: OrganizationId;
+      execution_id: ExecutionId;
+      command_sequence: number;
+      argv: unknown;
+      working_directory: string;
+      environment: unknown;
+      stdin_artifact_version_id: ArtifactVersionId | null;
+      timeout_ms: number;
+      command_hash: string;
+      created_at: string;
+    }>(
+      `SELECT id, organization_id, execution_id, command_sequence, argv,
+              working_directory, environment, stdin_artifact_version_id,
+              timeout_ms, command_hash, created_at::text
+       FROM execution_commands
+       WHERE execution_id = $1
+       ORDER BY command_sequence ASC`,
+      [executionId],
+    );
+    return res.rows.map((row) => ({
+      ...row,
+      argv: (typeof row.argv === 'string'
+        ? JSON.parse(row.argv)
+        : row.argv) as readonly string[],
+      environment: (typeof row.environment === 'string'
+        ? JSON.parse(row.environment)
+        : row.environment) as Readonly<Record<string, string>>,
+    }));
+  }
+
+  /**
+   * Retrieves every recorded output for an execution, in creation order.
+   * Returns array of ExecutionOutputRecords for reconstruction verification.
+   */
+  async getOutputsForExecution(
+    executionId: ExecutionId,
+  ): Promise<readonly ExecutionOutputRecord[]> {
+    const res = await this.pool.query<ExecutionOutputRecord>(
+      `SELECT id, organization_id, execution_id, artifact_version_id,
+              disposition, declaration_name, publishable, created_at::text
+       FROM execution_outputs
+       WHERE execution_id = $1
+       ORDER BY created_at ASC`,
+      [executionId],
+    );
+    return res.rows;
   }
 
   /**

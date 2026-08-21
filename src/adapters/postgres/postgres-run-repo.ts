@@ -251,4 +251,21 @@ export class PostgresRunRepository {
     );
     return res.rows[0] ?? null;
   }
+
+  /**
+   * Retrieves every attempt recorded for a run, ordered by attempt number.
+   * Returns full RunAttemptRecord history, including abandoned attempts.
+   */
+  async getRunAttemptsForRun(runId: RunId): Promise<readonly RunAttemptRecord[]> {
+    const res = await this.pool.query<RunAttemptRecord>(
+      `SELECT id, organization_id, run_id, attempt_number, plan, plan_hash,
+              state, failure_code, failure_detail, started_at::text,
+              ended_at::text, created_at::text
+       FROM run_attempts
+       WHERE run_id = $1
+       ORDER BY attempt_number ASC`,
+      [runId],
+    );
+    return res.rows;
+  }
 }

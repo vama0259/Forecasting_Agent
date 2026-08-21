@@ -67,6 +67,21 @@ export interface ExecutionOutputRecord {
   readonly created_at: string;
 }
 
+/** Persisted execution command record, including its content hash. */
+export interface ExecutionCommandRecord {
+  readonly id: string;
+  readonly organization_id: OrganizationId;
+  readonly execution_id: ExecutionId;
+  readonly command_sequence: number;
+  readonly argv: readonly string[];
+  readonly working_directory: string;
+  readonly environment: Readonly<Record<string, string>>;
+  readonly stdin_artifact_version_id: ArtifactVersionId | null;
+  readonly timeout_ms: number;
+  readonly command_hash: string;
+  readonly created_at: string;
+}
+
 /**
  * Interface defining persistence operations for containerized execution lifecycles.
  */
@@ -162,4 +177,28 @@ export interface ExecutionRepository {
    * Returns array of active ExecutionRecords for crash reconciliation.
    */
   getActiveExecutions(): Promise<readonly ExecutionRecord[]>;
+
+  /**
+   * Retrieves all executions belonging to a run attempt, in creation order.
+   * Returns array of ExecutionRecords for reconstruction and audit.
+   */
+  getExecutionsForAttempt(
+    runAttemptId: RunAttemptId,
+  ): Promise<readonly ExecutionRecord[]>;
+
+  /**
+   * Retrieves every recorded command for an execution, ordered by sequence.
+   * Returns array of ExecutionCommandRecords for reconstruction verification.
+   */
+  getCommandsForExecution(
+    executionId: ExecutionId,
+  ): Promise<readonly ExecutionCommandRecord[]>;
+
+  /**
+   * Retrieves every recorded output for an execution, in creation order.
+   * Returns array of ExecutionOutputRecords for reconstruction verification.
+   */
+  getOutputsForExecution(
+    executionId: ExecutionId,
+  ): Promise<readonly ExecutionOutputRecord[]>;
 }

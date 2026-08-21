@@ -12,6 +12,7 @@ import type { PostgresPool } from '../adapters/postgres/postgres-pool.js';
 import type { Sha256Hash } from '../core/types/identifiers.js';
 import { canonicalize } from '../core/utils/canonical-json.js';
 import { sha256Hex } from '../core/utils/crypto-hash.js';
+import { ArtifactCorruptedError } from '../core/errors/artifact-corrupted.error.js';
 
 /** Artifact record included within a point-in-time backup manifest. */
 export interface BackupArtifactEntry {
@@ -112,21 +113,42 @@ export class BackupService {
           ? row.storage_key
           : path.join(this.artifactStoreBaseDir, row.storage_key);
 
-        if (fs.existsSync(srcPath)) {
-          const relKey = path.isAbsolute(row.storage_key)
-            ? path.relative(this.artifactStoreBaseDir, row.storage_key)
-            : row.storage_key;
-
-          const destPath = path.join(artifactsTargetDir, relKey);
-          fs.mkdirSync(path.dirname(destPath), { recursive: true });
-          fs.copyFileSync(srcPath, destPath);
-
-          artifactEntries.push({
-            storage_key: relKey,
-            content_sha256: row.content_sha256 as Sha256Hash,
-            content_bytes: Number(row.content_bytes),
-          });
+        if (!fs.existsSync(srcPath)) {
+          throw new ArtifactCorruptedError(
+            `Backup source artifact missing: ${row.storage_key}`,
+            { storageKey: row.storage_key, expectedSha256: row.content_sha256 },
+          );
         }
+
+        const relKey = path.isAbsolute(row.storage_key)
+          ? path.relative(this.artifactStoreBaseDir, row.storage_key)
+          : row.storage_key;
+
+        const destPath = path.join(artifactsTargetDir, relKey);
+        fs.mkdirSync(path.dirname(destPath), { recursive: true });
+        fs.copyFileSync(srcPath, destPath);
+
+        // Verify the bytes actually copied match the DB's claimed hash, not
+        // just that copyFileSync reported success. A backup certifies bytes
+        // it has itself hashed, never a claim it trusted from the database.
+        const copiedBytes = fs.readFileSync(destPath);
+        const actualSha256 = sha256Hex(copiedBytes);
+        if (actualSha256 !== row.content_sha256) {
+          throw new ArtifactCorruptedError(
+            `Backup artifact hash mismatch: ${row.storage_key}`,
+            {
+              storageKey: row.storage_key,
+              expectedSha256: row.content_sha256,
+              actualSha256,
+            },
+          );
+        }
+
+        artifactEntries.push({
+          storage_key: relKey,
+          content_sha256: row.content_sha256 as Sha256Hash,
+          content_bytes: Number(row.content_bytes),
+        });
       }
 
       // 3. Write manifest

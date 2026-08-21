@@ -175,4 +175,36 @@ export class PostgresArtifactRepository {
     const row = res.rows[0];
     return row ? this.mapVersionRow(row) : null;
   }
+
+  /**
+   * Retrieves the artifact version IDs an execution declared as inputs.
+   * Returns array of ArtifactVersionId for reconstruction and lineage.
+   */
+  async getExecutionInputs(
+    executionId: string,
+  ): Promise<readonly { artifact_version_id: ArtifactVersionId }[]> {
+    const res = await this.pool.query<{ artifact_version_id: ArtifactVersionId }>(
+      `SELECT artifact_version_id FROM execution_inputs WHERE execution_id = $1`,
+      [executionId],
+    );
+    return res.rows;
+  }
+
+  /**
+   * Retrieves lineage edges where the given version is the child.
+   * Returns array of parent ArtifactVersionId and relation pairs.
+   */
+  async getArtifactEdgesForVersion(
+    childVersionId: ArtifactVersionId,
+  ): Promise<readonly { parent_version_id: ArtifactVersionId; relation: string }[]> {
+    const res = await this.pool.query<{
+      parent_version_id: ArtifactVersionId;
+      relation: string;
+    }>(
+      `SELECT parent_version_id, relation
+       FROM artifact_edges WHERE child_version_id = $1`,
+      [childVersionId],
+    );
+    return res.rows;
+  }
 }

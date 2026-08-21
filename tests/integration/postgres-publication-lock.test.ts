@@ -6,11 +6,17 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { PostgresPool } from '../../src/adapters/postgres/postgres-pool.js';
 import {
   PostgresStorageRepository,
   // repo
 } from '../../src/adapters/postgres/postgres-storage-repo.js';
+import {
+  LocalArtifactStore,
+  // store
+} from '../../src/adapters/storage/local-artifact-store.js';
 import type {
   ArtifactVersionId,
   ContractId,
@@ -21,17 +27,25 @@ import type {
 } from '../../src/core/types/identifiers.js';
 import type { CanonicalPlan } from '../../src/core/types/execution.js';
 
+async function* singleChunk(data: Buffer): AsyncIterable<Uint8Array> {
+  yield data;
+}
+
 describe('Postgres Publication Race Integration', () => {
+  const testDir = path.resolve(process.cwd(), 'data', 'test-publication-lock');
   let pool: PostgresPool;
   let repo: PostgresStorageRepository;
+  let artifactStore: LocalArtifactStore;
   let orgId: OrganizationId;
   let runId: RunId;
   let runAttemptId: RunAttemptId;
   let manifestVersionId: ArtifactVersionId;
 
   beforeAll(async () => {
+    fs.mkdirSync(testDir, { recursive: true });
     pool = new PostgresPool();
     repo = new PostgresStorageRepository(pool);
+    artifactStore = new LocalArtifactStore(testDir);
 
     const org = await repo.createOrganization({
       slug: `pub-test-org-${Date.now()}`,
@@ -92,6 +106,10 @@ describe('Postgres Publication Race Integration', () => {
     });
     runAttemptId = attempt.id;
 
+    const manifestBytes = Buffer.from(JSON.stringify({ run: runId }));
+    const manifestStaged = await artifactStore.stage(singleChunk(manifestBytes), orgId);
+    const manifestCommitted = await artifactStore.commit(manifestStaged);
+
     const artifact = await repo.createArtifact({
       organization_id: orgId,
       project_id: proj.id,
@@ -104,10 +122,10 @@ describe('Postgres Publication Race Integration', () => {
       artifact_id: artifact.id,
       version: 1,
       state: 'AVAILABLE',
-      content_sha256: '3'.repeat(64) as Sha256Hash,
-      content_bytes: 512,
+      content_sha256: manifestCommitted.content_sha256,
+      content_bytes: manifestCommitted.content_bytes,
       media_type: 'application/json',
-      storage_key: '/data/artifacts/sha256/33/' + '3'.repeat(64),
+      storage_key: manifestCommitted.storage_key,
       available_from: new Date().toISOString(),
       retrieved_at: new Date().toISOString(),
     });
@@ -116,6 +134,9 @@ describe('Postgres Publication Race Integration', () => {
 
   afterAll(async () => {
     await pool.close();
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
   });
 
   it('allows only 1 winner when workers publish for same run_id', async () => {

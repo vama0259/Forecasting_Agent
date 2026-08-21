@@ -101,7 +101,14 @@ describe('Foundation End-to-End Pipeline Tests', () => {
     );
     broker = new ExecutionBroker(runtime, execRepo, auditSink, stager, collector);
 
-    reconstruction = new ReconstructionEngine(storageRepo, evalRepo, pool);
+    reconstruction = new ReconstructionEngine(
+      storageRepo,
+      execRepo,
+      outcomeRepo,
+      evalRepo,
+      artifactStore,
+      pool,
+    );
     backupService = new BackupService(writeBarrier, pool, path.join(testDir, 'store'));
     restoreService = new RestoreService(pool, path.join(testDir, 'store'));
   });

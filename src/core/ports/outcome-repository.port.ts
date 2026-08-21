@@ -50,4 +50,12 @@ export interface OutcomeRepository {
   getLatestOutcomeVersion(
     publicationId: PublicationId,
   ): Promise<OutcomeVersionRecord | null>;
+
+  /**
+   * Retrieves every outcome version for a publication, ordered by version.
+   * Returns full OutcomeVersionRecord history for reconstruction.
+   */
+  getAllOutcomeVersions(
+    publicationId: PublicationId,
+  ): Promise<readonly OutcomeVersionRecord[]>;
 }

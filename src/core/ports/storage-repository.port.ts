@@ -239,4 +239,26 @@ export interface StorageRepository {
    * Returns PublicationRecord or null if unpublished.
    */
   getPublicationByRunId(runId: RunId): Promise<PublicationRecord | null>;
+
+  /**
+   * Retrieves every attempt recorded for a run, ordered by attempt number.
+   * Returns full RunAttemptRecord history, including abandoned attempts.
+   */
+  getRunAttemptsForRun(runId: RunId): Promise<readonly RunAttemptRecord[]>;
+
+  /**
+   * Retrieves the artifact version IDs an execution declared as inputs.
+   * Returns array of ArtifactVersionId for reconstruction and lineage.
+   */
+  getExecutionInputs(
+    executionId: string,
+  ): Promise<readonly { artifact_version_id: ArtifactVersionId }[]>;
+
+  /**
+   * Retrieves lineage edges where the given version is the child.
+   * Returns array of parent ArtifactVersionId and relation pairs.
+   */
+  getArtifactEdgesForVersion(
+    childVersionId: ArtifactVersionId,
+  ): Promise<readonly { parent_version_id: ArtifactVersionId; relation: string }[]>;
 }

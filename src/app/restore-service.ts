@@ -53,6 +53,10 @@ export class RestoreService {
   /**
    * Restores complete system state from backup directory after verifying all hashes.
    * Resolves on completion or throws error on corrupted artifact / mismatched hash.
+   * Verification runs entirely against the read-only backup source; the live
+   * database and artifact store are mutated only after every hash has been
+   * proven and the database transaction has committed, so a corrupt backup
+   * never leaves partially-applied state.
    */
   async restore(backupDir: string): Promise<void> {
     const manifestPath = path.join(backupDir, 'manifest.json');
@@ -62,7 +66,8 @@ export class RestoreService {
 
     const manifest: BackupManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 
-    // 1. Verify and copy artifacts
+    // 1. Verify every artifact against the read-only backup source without
+    // touching the live artifact store yet.
     const artifactsSourceDir = path.join(backupDir, 'artifacts');
     for (const art of manifest.artifacts) {
       const srcPath = path.join(artifactsSourceDir, art.storage_key);
@@ -77,16 +82,9 @@ export class RestoreService {
             `expected ${art.content_sha256}, got ${computedHash}`,
         );
       }
-
-      const destPath = path.isAbsolute(art.storage_key)
-        ? art.storage_key
-        : path.join(this.artifactStoreBaseDir, art.storage_key);
-
-      fs.mkdirSync(path.dirname(destPath), { recursive: true });
-      fs.copyFileSync(srcPath, destPath);
     }
 
-    // 2. Verify and restore database dump
+    // 2. Verify the database dump hash before parsing or applying it.
     const dbPath = path.join(backupDir, 'database.json');
     if (!fs.existsSync(dbPath)) {
       throw new Error(`Database dump not found at: ${dbPath}`);
@@ -103,6 +101,8 @@ export class RestoreService {
 
     const dbDump = JSON.parse(dbContent) as Record<string, Record<string, unknown>[]>;
 
+    // 3. Apply the verified dump inside one transaction; nothing here can
+    // fail on integrity, only on the database rejecting a row.
     await this.pool.withTransaction(async (client) => {
       for (const table of [...INSERT_ORDER].reverse()) {
         await client.query(`DELETE FROM ${table}`);
@@ -134,5 +134,54 @@ export class RestoreService {
         }
       }
     });
+
+    // 4. Only after the transaction has committed does verified data reach
+    // the live artifact store, so a failed transaction leaves it untouched.
+    const artifactsRoot = path.join(this.artifactStoreBaseDir, 'artifacts');
+    const restoredRelKeys = new Set<string>();
+    for (const art of manifest.artifacts) {
+      const srcPath = path.join(artifactsSourceDir, art.storage_key);
+      const destPath = path.isAbsolute(art.storage_key)
+        ? art.storage_key
+        : path.join(this.artifactStoreBaseDir, art.storage_key);
+
+      fs.mkdirSync(path.dirname(destPath), { recursive: true });
+      fs.copyFileSync(srcPath, destPath);
+      restoredRelKeys.add(path.relative(artifactsRoot, destPath));
+    }
+
+    // 5. Prune any file the artifact store held that the backup does not
+    // account for, so stale bytes from before the restore cannot survive.
+    // Scoped to the content-addressed "artifacts" subtree only; other
+    // directories under the store root (e.g. in-flight staging) are untouched.
+    this.pruneUnlistedFiles(artifactsRoot, restoredRelKeys);
+  }
+
+  /**
+   * Recursively removes files under root whose relative path is not in kept,
+   * then removes any directory left empty by that removal.
+   * Resolves once pruning completes; no-ops if root does not exist.
+   */
+  private pruneUnlistedFiles(root: string, kept: ReadonlySet<string>): void {
+    if (!fs.existsSync(root)) return;
+
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(fullPath);
+          if (fs.readdirSync(fullPath).length === 0) {
+            fs.rmdirSync(fullPath);
+          }
+          continue;
+        }
+        const relKey = path.relative(root, fullPath);
+        if (!kept.has(relKey)) {
+          fs.unlinkSync(fullPath);
+        }
+      }
+    };
+
+    walk(root);
   }
 }

@@ -123,7 +123,10 @@ export async function createApp(config: AppConfig): Promise<AppContext> {
 
   const reconstructionEngine = new ReconstructionEngine(
     storageRepo,
+    executionRepo,
+    outcomeRepo,
     evaluationRepo,
+    artifactStore,
     pool,
   );
   const backupService = new BackupService(writeBarrier, pool, config.artifactStoreDir);
