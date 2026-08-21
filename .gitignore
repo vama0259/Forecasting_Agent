@@ -1,5 +1,7 @@
 # Machine-specific graphify pointers; regenerated automatically on next run.
 graphify-out/.graphify_python
 graphify-out/.graphify_root
-# Updates on every `graphify query`; not meaningful content to track.
+# Updates on every `graphify query`/read; nanosecond mtimes have no
+# cross-machine value and churn the working tree on every run.
 graphify-out/cache/last_query_stamp
+graphify-out/cache/stat-index.json
