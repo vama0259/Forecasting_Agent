@@ -1,0 +1,38 @@
+{
+  "main.py": {
+    "mtime": 1787273438.981,
+    "seen": 1787273897.855943,
+    "ast_hash": "ff46cf114a66b6ceee7744c637abe636",
+    "semantic_hash": "ff46cf114a66b6ceee7744c637abe636"
+  },
+  ".pre-commit-config.yaml": {
+    "mtime": 1787273302.872841,
+    "seen": 1787273897.855946,
+    "ast_hash": "b6f712e7068ff37301c75d985585b5c6",
+    "semantic_hash": "b6f712e7068ff37301c75d985585b5c6"
+  },
+  "AGENTS.md": {
+    "mtime": 1787273473.1779027,
+    "seen": 1787273897.8559475,
+    "ast_hash": "85a17219b5705d314a4bc3ed33736352",
+    "semantic_hash": "85a17219b5705d314a4bc3ed33736352"
+  },
+  "docs/engineering-standards.md": {
+    "mtime": 1787273153.3604307,
+    "seen": 1787273897.8559482,
+    "ast_hash": "f00d973859ac15470ded487279652927",
+    "semantic_hash": "f00d973859ac15470ded487279652927"
+  },
+  "docs/superpowers/specs/2026-08-21-general-evidence-storage-design.md": {
+    "mtime": 1787272468.9849505,
+    "seen": 1787273897.8559492,
+    "ast_hash": "570936bedece2da2836224d2cc2cc7a4",
+    "semantic_hash": "570936bedece2da2836224d2cc2cc7a4"
+  },
+  "docs/superpowers/specs/2026-08-21-general-oci-sandbox-design.md": {
+    "mtime": 1787272974.5688684,
+    "seen": 1787273897.8559496,
+    "ast_hash": "80db6c268d92a7f3f77c3e0d7ced180a",
+    "semantic_hash": "80db6c268d92a7f3f77c3e0d7ced180a"
+  }
+}

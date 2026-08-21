@@ -11,6 +11,29 @@ Before writing code, read:
 - both foundation ADRs in `docs/superpowers/specs/`;
 - the implementation plan for the task.
 
+## Codebase search
+
+This repository is graphed with `graphify`. `graphify-out/graph.json` is the
+persistent knowledge graph over specs, engineering standards, and source
+files, with community detection and an EXTRACTED/INFERRED/AMBIGUOUS audit
+trail on every edge.
+
+- If `graphify-out/graph.json` exists, treat any question about architecture,
+  file relationships, prior decisions, or "how does X relate to Y" as a
+  graphify query first: `graphify query "<question>"`. Use
+  `graphify path "<A>" "<B>"` for the shortest relationship between two named
+  concepts, and `graphify explain "<Node>"` for a plain-language summary of
+  one node.
+- Do not rebuild the graph to answer a question — query the existing graph.
+  Rebuild only after specs or source files change meaningfully, via
+  `graphify . --update` (incremental) from the repository root.
+- Grep and file-by-file reading remain correct for exact-string lookups and
+  reading one already-identified file. Prefer graphify when the question is
+  about relationships, rationale, or "what connects to what" across more than
+  one file.
+- Cite `source_location` from the query result when a graphify answer backs a
+  claim in code review, a plan, or an ADR update.
+
 ## Architecture
 
 - Use Clean Architecture; source dependencies point toward core policy.
