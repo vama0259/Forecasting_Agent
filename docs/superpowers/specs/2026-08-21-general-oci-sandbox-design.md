@@ -88,6 +88,8 @@ If provisioning moves to a separate trust domain later, replace the local record
 
 Use a version-controlled local allowlist of immutable image and platform digests. Startup admission checks the digest, configured non-root user contract, entrypoint contract, dependency lock, and runtime-conformance result.
 
+The entrypoint contract requires the image's PID 1 to remain running after the workload command completes, until the broker explicitly terminates it. Podman tears down a container's mount namespace, and every tmpfs-backed writable directory with it, as soon as its process exits, is paused, or is stopped; there is no runtime path to read `/workspace`, `/outputs`, `/tmp`, or `/home/runtime` afterward, by `cp` or by `exec`. Collection therefore always runs against a `RUNNING` container, never one that has exited, been frozen, or been stopped, and startup admission rejects any image whose entrypoint exits immediately after the command.
+
 Do not claim image signature verification in the initial local design. Registry or multi-host deployment requires Sigstore/Cosign verification, trusted identity policy, revocation, and an auditable verification record before image pull/admission.
 
 No `latest` tags or tag fallback are permitted. The initial conformance image is a minimal neutral execution image. A Python workload image may later pin Python `3.14.7` plus an immutable dependency lock and image digest, but it is not required by the foundation. Scientific, finance, model-specific, R, JavaScript, or other workload images are separate profiles admitted through the same generic contract.
@@ -123,7 +125,7 @@ The image runs as a fixed non-root UID/GID declared by the image contract. Rando
 - private PID, IPC, mount, and network namespaces;
 - PID, CPU, memory, wall-time, and tmpfs limits;
 - no Podman socket, database, artifact-root, provider, or connector credentials;
-- terminate the entire container on timeout or cancellation, collect bounded diagnostic evidence, then remove it during cleanup.
+- on timeout or cancellation, collect bounded diagnostic evidence from the still-`RUNNING` container first, then terminate and remove it during cleanup.
 
 Unsupported mandatory controls reject provisioning. The adapter never silently weakens policy.
 
@@ -139,7 +141,7 @@ Commands for one execution are serialized. Different executions may run concurre
 
 Podman stdout/stderr streams are consumed incrementally with Node.js stream backpressure and their channel framing is verified by conformance tests. Store bounded head-and-tail representations plus total byte and truncation counts. Never buffer an unbounded stream or complete artifact in host memory.
 
-Timeout and cancellation record a pending terminal reason, call Podman stop/kill through the rootless runtime API, wait for the container to exit, revoke temporary grants, and enter `COLLECTING`. The collector retains bounded logs and any readable declared outputs as diagnostic artifacts marked non-publishable; it does not require missing outputs and cannot transition the execution to `COMPLETED`. After diagnostic collection, the execution enters `TIMED_OUT` or `CANCELLED` and cleanup removes runtime resources. Diagnostic collection failure is recorded as a secondary event without replacing the primary terminal reason. Rejecting a JavaScript promise alone is not cancellation.
+Timeout and cancellation record a pending terminal reason and enter `COLLECTING` while the container is still `RUNNING`. The collector retains bounded logs and any readable declared outputs as diagnostic artifacts marked non-publishable; it does not require missing outputs and cannot transition the execution to `COMPLETED`. If the container has already exited on its own before diagnostic collection starts, only bounded logs already captured by the streaming API are retained; filesystem outputs are unrecoverable and diagnostic collection is recorded as partial. After diagnostic collection, the broker calls Podman stop/kill through the rootless runtime API, waits for the container to exit, revokes temporary grants, and the execution enters `TIMED_OUT` or `CANCELLED`; cleanup then removes runtime resources. Diagnostic collection failure is recorded as a secondary event without replacing the primary terminal reason. Rejecting a JavaScript promise alone is not cancellation.
 
 Typed failures include `COMMAND_FAILED`, `TIMED_OUT`, `OOM_KILLED`, `PID_LIMIT`, `STORAGE_LIMIT`, `CANCELLED`, `COLLECTION_FAILED`, `CLEANUP_FAILED`, and `RUNTIME_FAILED`.
 
@@ -147,15 +149,19 @@ Typed failures include `COMMAND_FAILED`, `TIMED_OUT`, `OOM_KILLED`, `PID_LIMIT`,
 
 The frozen execution contract declares relative paths, required/optional status, media type/schema, per-file size, total size, and file-count limits.
 
+Podman tears down every tmpfs-backed writable directory as soon as a container's process exits, is paused, or is stopped; there is no runtime path to read `/workspace`, `/outputs`, `/tmp`, or `/home/runtime` afterward, by `cp` or by `exec`. Collection therefore always runs against a container that is still `RUNNING`; the container is never frozen, stopped, or allowed to exit before its declared outputs are read.
+
 Collection order:
 
-1. enter `COLLECTING`; if the container is `RUNNING`, freeze or stop it, and if it is already `EXITED`, collect directly before destruction;
+1. enter `COLLECTING` while the container is still `RUNNING`;
 2. enumerate declared outputs without following links;
 3. reject traversal, absolute paths, links, devices, undeclared files, invalid schemas, or exceeded limits;
 4. stream accepted bytes through the host ArtifactStore;
 5. verify hashes and required output availability;
 6. atomically insert versions/lineage and transition to `COMPLETED`;
-7. clean resources and record cleanup independently.
+7. stop the container, await its exit, and clean resources, recording cleanup independently.
+
+If the container has already exited on its own before collection starts, transition directly to `COLLECTION_FAILED`: required declared outputs cannot be read from a torn-down tmpfs, so collection cannot proceed regardless of exit code.
 
 Optional evidence is determined by the execution contract. Prompts, code, models, tools, approvals, or skills are never universally mandatory.
 
@@ -209,14 +215,14 @@ Security-relevant events are append-only and mandatory before provisioning. Non-
 interface SandboxRuntime {
   provision(request: ProvisionRequest): Promise<RuntimeHandle>;
   execute(handle: RuntimeHandle, command: CommandRequest): Promise<CommandResult>;
-  freeze(handle: RuntimeHandle): Promise<void>;
+  collect(handle: RuntimeHandle, declarations: OutputDeclaration[]): Promise<ReadableStream<Uint8Array>[]>;
   terminate(handle: RuntimeHandle, reason: TerminationReason): Promise<void>;
   destroy(handle: RuntimeHandle): Promise<CleanupResult>;
   inspect(handle: RuntimeHandle): Promise<RuntimeState>;
 }
 ```
 
-Each adapter declares supported controls. Provisioning rejects any mandatory control the adapter cannot enforce.
+There is no `freeze` method: pausing a container tears down its tmpfs mounts exactly as exiting does, so pausing has no valid use in this runtime and is not part of the port. `collect` reads declared outputs from a `RUNNING` container before `terminate` is ever called. Each adapter declares supported controls. Provisioning rejects any mandatory control the adapter cannot enforce.
 
 ## 15. Real-Podman conformance
 
@@ -234,7 +240,7 @@ Tests against the pinned rootless Podman runtime prove:
 - traversal, links, devices, undeclared paths, count/size excess, and schema failures are rejected;
 - duplicate or expired authorization cannot provision;
 - collection ordering and lifecycle persistence are consistent;
-- output collection succeeds for both running and already-exited containers;
+- output collection succeeds against a running container and produces `COLLECTION_FAILED`, not a silent empty result, if the container has already exited;
 - broker crash/orphan reconciliation is idempotent;
 - active database state with no matching container is failed or collection-failed deterministically before new work starts;
 - two-slot admission never runs a third container.
@@ -276,3 +282,4 @@ Use a trusted local broker and one hardened, rootless, networkless, disposable P
 - 2026-08-21: Initial runtime changed from Docker to verified rootless Podman 5.8.4; OCI portability remains a conformance contract, not an untested compatibility claim.
 - 2026-08-21: Rootless Unix-socket ownership and Fedora SELinux staging rules made explicit.
 - 2026-08-21: Final lifecycle pass added exact command binding, bidirectional reconciliation, diagnostic timeout/cancel collection, repository ownership, and conservative 16 GiB host/container budgets.
+- 2026-08-21: Verified against real rootless Podman 5.8.4 that pausing or stopping a container makes its tmpfs mounts unreadable by any mechanism; removed the false exited/frozen-container collection path, reordered collection to always precede termination, dropped the unused `freeze` runtime method, and made an unexpected pre-collection exit a deterministic `COLLECTION_FAILED` rather than a silent empty result.
