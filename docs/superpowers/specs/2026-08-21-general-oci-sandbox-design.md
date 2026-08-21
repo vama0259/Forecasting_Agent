@@ -62,6 +62,8 @@ Podman is an infrastructure adapter, not the architecture. Core execution policy
 
 `RootlessPodmanRuntime` connects only to the service account's Unix socket at `%t/podman/podman.sock` through the native Libpod API. The socket is never exposed over TCP or mounted into a container. The service account owns only this application's runtime resources; container labels and persisted execution identity remain the authorization boundary for inspection, collection, and cleanup.
 
+Ports are consumer-owned interfaces. The sandbox module owns `ExecutionRepository` and `AuditSink`; the storage module provides one PostgreSQL adapter implementing both alongside its storage repositories. Sandbox code never imports that adapter or database tables. Execution lifecycle transactions and mandatory audit appends are methods on the same adapter so they cannot commit independently.
+
 ## 5. Execution authorization
 
 For the single-host startup, do not claim distributed cryptographic ticket signing. The trusted host creates a short-lived, one-time authorization record inside the same process and transaction boundary that owns provisioning.
@@ -71,6 +73,7 @@ The frozen authorization binds:
 - authorization ID, creation time, expiry, and canonical authorization hash;
 - organization, project, run, attempt, and execution IDs;
 - plan hash and execution-contract hash;
+- command-set hash covering the exact ordered command records;
 - approved image/platform digest;
 - exact input artifact grants and normalized mount destinations;
 - required output declarations;
@@ -120,7 +123,7 @@ The image runs as a fixed non-root UID/GID declared by the image contract. Rando
 - private PID, IPC, mount, and network namespaces;
 - PID, CPU, memory, wall-time, and tmpfs limits;
 - no Podman socket, database, artifact-root, provider, or connector credentials;
-- kill and await removal of the entire container on timeout or cancellation.
+- terminate the entire container on timeout or cancellation, collect bounded diagnostic evidence, then remove it during cleanup.
 
 Unsupported mandatory controls reject provisioning. The adapter never silently weakens policy.
 
@@ -136,7 +139,7 @@ Commands for one execution are serialized. Different executions may run concurre
 
 Podman stdout/stderr streams are consumed incrementally with Node.js stream backpressure and their channel framing is verified by conformance tests. Store bounded head-and-tail representations plus total byte and truncation counts. Never buffer an unbounded stream or complete artifact in host memory.
 
-Timeout and cancellation call Podman stop/kill through the rootless runtime API, wait for terminal state, revoke temporary grants, and continue idempotent cleanup. Rejecting a JavaScript promise alone is not cancellation.
+Timeout and cancellation record a pending terminal reason, call Podman stop/kill through the rootless runtime API, wait for the container to exit, revoke temporary grants, and enter `COLLECTING`. The collector retains bounded logs and any readable declared outputs as diagnostic artifacts marked non-publishable; it does not require missing outputs and cannot transition the execution to `COMPLETED`. After diagnostic collection, the execution enters `TIMED_OUT` or `CANCELLED` and cleanup removes runtime resources. Diagnostic collection failure is recorded as a secondary event without replacing the primary terminal reason. Rejecting a JavaScript promise alone is not cancellation.
 
 Typed failures include `COMMAND_FAILED`, `TIMED_OUT`, `OOM_KILLED`, `PID_LIMIT`, `STORAGE_LIMIT`, `CANCELLED`, `COLLECTION_FAILED`, `CLEANUP_FAILED`, and `RUNTIME_FAILED`.
 
@@ -161,6 +164,9 @@ Optional evidence is determined by the execution contract. Prompts, code, models
 ```text
 AUTHORIZED -> PROVISIONING -> READY -> RUNNING -> COLLECTING -> COMPLETED
 
+timeout/cancel:
+RUNNING -> COLLECTING (diagnostic-only) -> TIMED_OUT | CANCELLED
+
 terminal failures:
 REJECTED | FAILED | CANCELLED | TIMED_OUT | COLLECTION_FAILED | QUARANTINED
 
@@ -177,13 +183,21 @@ io.forecasting.foundation.run-attempt-id=<run-attempt-id>
 io.forecasting.foundation.created-at=<RFC3339 timestamp>
 ```
 
-Startup reconciliation finds only containers with the exact managed-by label, validates the remaining label values against persisted state, and resumes cleanup or records a typed failure.
+Startup reconciliation is bidirectional:
+
+1. Runtime-to-state: find only containers with the exact managed-by label, validate remaining labels against persisted identity, then resume collection/cleanup or quarantine an unknown resource.
+2. State-to-runtime: query every execution in `PROVISIONING`, `READY`, `RUNNING`, or `COLLECTING` and require the expected labeled container. If none exists after the persisted provisioning grace deadline, append `RUNTIME_MISSING`, transition `PROVISIONING/READY/RUNNING` to `FAILED`, transition `COLLECTING` to `COLLECTION_FAILED`, and complete no-resource cleanup idempotently.
+3. `AUTHORIZED` executions with unredeemed authorization remain eligible until expiry; redeemed authorization without a container is handled by rule 2. A retry always creates a new execution and authorization.
+
+Reconciliation runs before the scheduler accepts new work and repeatedly afterward. The broker must hold the separate `BROKER_SINGLETON` PostgreSQL advisory session lock for its entire lifetime; failure to acquire it prevents scheduling or reconciliation. This key is distinct from Storage's `BACKUP_WRITE_BARRIER`. `provisioning_deadline` is persisted before Podman creation, so missing-runtime decisions do not depend on process memory or wall-clock guesses after restart.
 
 ## 13. Scheduling and local profile
 
 Implement a new in-process two-slot semaphore; do not inherit a legacy concurrency guard. Queueing is bounded and cancellable. Backpressure rejects excess work rather than overcommitting the host.
 
-Initial limits are configuration, not performance claims. Neutral stress fixtures measure CPU, memory, PID, tmpfs, output, timeout, cancellation, and concurrent-execution behavior on the actual 16 GB machine. No analytics or scientific workload is assumed.
+Initial safe profile for the 16 GB host reserves at least 6 GiB for Fedora, Node.js, PostgreSQL, Podman, filesystem cache, and host tools. Each of at most two containers has a 3 GiB cgroup memory limit partitioned as: 1.5 GiB process budget, at most 1 GiB total writable tmpfs (`workspace` 512 MiB, `outputs` 256 MiB, `tmp` 128 MiB, `home` 64 MiB), and at least 512 MiB runtime headroom. GPU memory is irrelevant because no GPU device is exposed.
+
+These are conservative admission ceilings, not workload performance claims. Real neutral stress fixtures verify CPU, memory, PID, tmpfs, output, timeout, cancellation, and two-container pressure on the actual machine. A workload requiring more is queued into an explicitly measured one-slot profile rather than weakening host reserve or overcommitting two slots.
 
 GPU is unavailable to containers. Any future GPU profile requires a dedicated image, device policy, resource tests, and conformance suite.
 
@@ -222,6 +236,7 @@ Tests against the pinned rootless Podman runtime prove:
 - collection ordering and lifecycle persistence are consistent;
 - output collection succeeds for both running and already-exited containers;
 - broker crash/orphan reconciliation is idempotent;
+- active database state with no matching container is failed or collection-failed deterministically before new work starts;
 - two-slot admission never runs a third container.
 
 Use only neutral fixtures and pinned image digests.
@@ -243,6 +258,7 @@ Before hostile native-code or regulated workloads: evaluate microVMs or dedicate
 - Writable disk bounds use verified tmpfs limits rather than unsupported named-volume quotas.
 - Timeout and cancellation terminate the actual container, not only the caller promise.
 - Required outputs become available before completion; collection failure never completes.
+- Timeout/cancellation collects only non-publishable diagnostics before preserving its primary terminal state.
 - Cleanup and crash reconciliation are repeatable and visible.
 - At most two containers run concurrently on the local host.
 - No fixture, image profile, mount, or runtime type encodes an industry or forecasting protocol.
@@ -259,3 +275,4 @@ Use a trusted local broker and one hardened, rootless, networkless, disposable P
 - 2026-08-21: Broker fixed as the Node.js 24 LTS/TypeScript control plane; Podman, PostgreSQL, pnpm, and optional Python workload baselines pinned with explicit upgrade gates.
 - 2026-08-21: Initial runtime changed from Docker to verified rootless Podman 5.8.4; OCI portability remains a conformance contract, not an untested compatibility claim.
 - 2026-08-21: Rootless Unix-socket ownership and Fedora SELinux staging rules made explicit.
+- 2026-08-21: Final lifecycle pass added exact command binding, bidirectional reconciliation, diagnostic timeout/cancel collection, repository ownership, and conservative 16 GiB host/container budgets.
