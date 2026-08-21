@@ -17,6 +17,7 @@ import {
   LocalArtifactStore,
   // store
 } from '../../src/adapters/storage/local-artifact-store.js';
+import { deleteOrganizationCascade } from '../support/db-cleanup.js';
 import type {
   ArtifactVersionId,
   ContractId,
@@ -133,6 +134,7 @@ describe('Postgres Publication Race Integration', () => {
   });
 
   afterAll(async () => {
+    await deleteOrganizationCascade(pool, orgId);
     await pool.close();
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });

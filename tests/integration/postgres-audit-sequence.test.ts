@@ -19,6 +19,7 @@ import {
   PostgresExecutionRepository,
   // repo
 } from '../../src/adapters/postgres/postgres-execution-repo.js';
+import { deleteOrganizationCascade } from '../support/db-cleanup.js';
 import type {
   ContractId,
   ExecutionContractId,
@@ -159,6 +160,7 @@ describe('PostgresAuditSink Integration', () => {
   });
 
   afterAll(async () => {
+    await deleteOrganizationCascade(pool, orgId);
     await pool.close();
   });
 

@@ -16,6 +16,7 @@ import {
   // repo
 } from '../../src/adapters/postgres/postgres-execution-repo.js';
 import { AuthorizationError } from '../../src/core/errors/authorization.error.js';
+import { deleteOrganizationCascade } from '../support/db-cleanup.js';
 import type {
   ContractId,
   ExecutionContractId,
@@ -127,6 +128,7 @@ describe('PostgresExecutionRepository Integration', () => {
   });
 
   afterAll(async () => {
+    await deleteOrganizationCascade(pool, orgId);
     await pool.close();
   });
 

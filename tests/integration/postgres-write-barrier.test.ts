@@ -13,11 +13,13 @@ import {
 } from '../../src/adapters/postgres/postgres-write-barrier.js';
 
 import { PostgresMigrator } from '../../src/adapters/postgres/postgres-migrator.js';
+import { deleteOrganizationCascade } from '../support/db-cleanup.js';
+import type { OrganizationId } from '../../src/core/types/identifiers.js';
 
 describe('PostgresWriteBarrier Integration', () => {
   let pool: PostgresPool;
   let barrier: PostgresWriteBarrier;
-  let testOrgId: string;
+  let testOrgId: OrganizationId;
 
   beforeAll(async () => {
     pool = new PostgresPool();
@@ -32,10 +34,11 @@ describe('PostgresWriteBarrier Integration', () => {
        RETURNING id`,
       [`barrier-org-${Date.now()}`],
     );
-    testOrgId = res.rows[0]?.id as string;
+    testOrgId = res.rows[0]?.id as OrganizationId;
   });
 
   afterAll(async () => {
+    await deleteOrganizationCascade(pool, testOrgId);
     await pool.close();
   });
 

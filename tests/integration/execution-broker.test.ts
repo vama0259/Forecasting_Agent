@@ -33,6 +33,7 @@ import { ArtifactStager } from '../../src/execution/artifact-stager.js';
 import { OutputCollector } from '../../src/execution/output-collector.js';
 import { ExecutionBroker } from '../../src/execution/execution-broker.js';
 import { sha256Hex } from '../../src/core/utils/crypto-hash.js';
+import { deleteOrganizationCascade } from '../support/db-cleanup.js';
 import type {
   ArtifactId,
   ContractId,
@@ -189,6 +190,7 @@ describe('ExecutionBroker Integration Tests', () => {
   });
 
   afterAll(async () => {
+    await deleteOrganizationCascade(pool, orgId);
     await pool.close();
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });

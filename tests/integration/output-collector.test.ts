@@ -26,6 +26,7 @@ import {
   // collector
 } from '../../src/execution/output-collector.js';
 import type { SandboxRuntime } from '../../src/core/ports/sandbox-runtime.port.js';
+import { deleteOrganizationCascade } from '../support/db-cleanup.js';
 import type {
   ContractId,
   ExecutionContractId,
@@ -167,6 +168,7 @@ describe('OutputCollector Integration Tests', () => {
   });
 
   afterAll(async () => {
+    await deleteOrganizationCascade(pool, orgId);
     await pool.close();
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });

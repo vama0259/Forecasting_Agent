@@ -28,6 +28,7 @@ import {
 import { ArtifactStager } from '../../src/execution/artifact-stager.js';
 import { OutputCollector } from '../../src/execution/output-collector.js';
 import { ExecutionBroker } from '../../src/execution/execution-broker.js';
+import { deleteOrganizationCascade } from '../support/db-cleanup.js';
 import type {
   ContractId,
   ExecutionContractId,
@@ -187,6 +188,7 @@ export async function setupBrokerFixture(
 export async function teardownBrokerFixture(
   fixture: BrokerDiagnosticsFixture,
 ): Promise<void> {
+  await deleteOrganizationCascade(fixture.pool, fixture.orgId);
   await fixture.pool.close();
   if (fs.existsSync(fixture.testDir)) {
     fs.rmSync(fixture.testDir, { recursive: true, force: true });

@@ -11,6 +11,7 @@ import {
   PostgresStorageRepository,
   // repo
 } from '../../src/adapters/postgres/postgres-storage-repo.js';
+import { deleteOrganizationCascade } from '../support/db-cleanup.js';
 import type {
   ContractId,
   OrganizationId,
@@ -43,6 +44,7 @@ describe('PostgresStorageRepository Integration', () => {
   });
 
   afterAll(async () => {
+    await deleteOrganizationCascade(pool, orgId);
     await pool.close();
   });
 

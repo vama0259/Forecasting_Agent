@@ -51,9 +51,11 @@ import {
 import { BackupService } from '../../src/app/backup-service.js';
 import { RestoreService } from '../../src/app/restore-service.js';
 import { seedE2EEntities } from './e2e-fixtures.js';
+import { deleteOrganizationCascade } from '../support/db-cleanup.js';
 import type {
   ArtifactVersionId,
   ExecutionId,
+  OrganizationId,
   Sha256Hash,
 } from '../../src/core/types/identifiers.js';
 import type {
@@ -77,6 +79,7 @@ describe('Foundation End-to-End Pipeline Tests', () => {
   let reconstruction: ReconstructionEngine;
   let backupService: BackupService;
   let restoreService: RestoreService;
+  let seededOrgId: OrganizationId | undefined;
 
   beforeAll(async () => {
     fs.mkdirSync(testDir, { recursive: true });
@@ -114,6 +117,9 @@ describe('Foundation End-to-End Pipeline Tests', () => {
   });
 
   afterAll(async () => {
+    if (seededOrgId) {
+      await deleteOrganizationCascade(pool, seededOrgId);
+    }
     await pool.close();
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });
@@ -123,6 +129,7 @@ describe('Foundation End-to-End Pipeline Tests', () => {
   it('runs complete E2E forecasting flow from run to eval and backup', async () => {
     const seeded = await seedE2EEntities(pool, storageRepo, artifactStore);
     const { orgId, projId, principalId, contract, execContract, inputVersion } = seeded;
+    seededOrgId = orgId;
 
     // 1. Create run and attempt
     const run = await storageRepo.createRun({

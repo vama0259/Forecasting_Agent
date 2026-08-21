@@ -20,6 +20,7 @@ import {
   // sink
 } from '../../src/adapters/postgres/postgres-audit-sink.js';
 import { StartupReconciler } from '../../src/execution/startup-reconciler.js';
+import { deleteOrganizationCascade } from '../support/db-cleanup.js';
 import type { SandboxRuntime } from '../../src/core/ports/sandbox-runtime.port.js';
 import type {
   ContractId,
@@ -175,6 +176,7 @@ describe('StartupReconciler Integration Tests', () => {
   });
 
   afterAll(async () => {
+    await deleteOrganizationCascade(pool, orgId);
     await pool.close();
   });
 
