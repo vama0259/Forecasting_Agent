@@ -1,0 +1,37 @@
+{
+  "name": "generic-forecasting-foundation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint .",
+    "format:check": "prettier --check --no-error-on-unmatched-pattern 'src/**/*.ts' 'scripts/**/*.ts' 'tests/**/*.ts'",
+    "format:write": "prettier --write --no-error-on-unmatched-pattern 'src/**/*.ts' 'scripts/**/*.ts' 'tests/**/*.ts'",
+    "check:tsdoc": "tsx scripts/check-tsdoc.ts",
+    "check:arch": "tsx scripts/check-architecture.ts",
+    "check:all": "pnpm run check:tsdoc && pnpm run check:arch && pnpm run lint && pnpm run format:check && pnpm run build",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:conformance": "vitest run tests/conformance",
+    "test:e2e": "vitest run tests/e2e"
+  },
+  "dependencies": {
+    "pg": "^8.13.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "@types/pg": "^8.11.11",
+    "@typescript-eslint/eslint-plugin": "^8.24.1",
+    "@typescript-eslint/parser": "^8.24.1",
+    "eslint": "^9.20.1",
+    "prettier": "^3.5.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.6"
+  }
+}

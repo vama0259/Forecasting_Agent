@@ -5,3 +5,7 @@ graphify-out/.graphify_root
 # cross-machine value and churn the working tree on every run.
 graphify-out/cache/last_query_stamp
 graphify-out/cache/stat-index.json
+node_modules/
+data/
+dist/
+.idea/

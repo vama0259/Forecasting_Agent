@@ -1,0 +1,8 @@
+node_modules/
+dist/
+data/
+coverage/
+graphify-out/
+.idea/
+docs/
+pnpm-lock.yaml
